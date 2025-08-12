@@ -5,6 +5,8 @@
     --black: #000000;
     --white: #FFFFFF;
     --light-gray: #F5F5F5;
+  --node-height: 36px;       /* adjustable node height */
+  --node-font-size: 0.8rem;  /* adjustable label size */
 }
 
 * {
@@ -40,26 +42,66 @@ body {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
-.input-group {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.input-field {
-    flex: 1;
-    padding: 0.75rem 1rem;
-    border: 2px solid var(--blue-80);
-    border-radius: 8px;
+/* Dashed Today line */
+.today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px dashed #d32f2f;
+    z-index: 9;            /* behind hovered bars (z>10) but above background */
+    display: none;         /* toggled by JS */
+    pointer-events: none;
+  }
+  
+  /* Hide UI chrome in export to get a clean image */
+  body.exporting .controls-section,
+  body.exporting .drag-instruction,
+  body.exporting .projects-list,
+  body.exporting .semicircle-menu {
+    display: none !important;
+  }
+  
+  /* Make the input more chatbox-like */
+  .input-group {
+    background: #f7f9fc;
+    border: 1px solid #dce3f2;
+    border-radius: 9999px;
+    padding: 0.5rem 0.5rem 0.5rem 1rem;
+  }
+  
+  .input-field {
+    border: none;
+    background: transparent;
     font-size: 1rem;
-    transition: border-color 0.3s ease;
-}
-
-.input-field:focus {
+  }
+  
+  .input-field:focus {
+    outline: none;
+    border-color: transparent;
+  }
+  
+  .send-btn {
+    border-radius: 9999px;
+    padding: 0.6rem 1rem;
+  }
+  
+  /* White box fix while editing dates in the project list */
+  .project-dates.editing {
+    background: transparent;              /* remove white box */
+    border: 1px dashed var(--blue-80);    /* lighter outline for edit mode */
+    padding: 6px;
+  }
+  
+  .date-input {
+    background: #f5f8ff;                 /* subtle background */
+    border: 1px solid var(--blue-80);
+  }
+  
+  .date-input:focus {
     outline: none;
     border-color: var(--primary-blue);
-}
+  }
 
 .color-selector {
     padding: 0.75rem 1rem;
@@ -231,11 +273,11 @@ body {
     color: var(--white);
     padding: 4px 8px;
     border-radius: 6px;
-    font-size: 0.8rem;
+    font-size: var(--node-font-size); /* was 0.8rem */
     font-weight: bold;
     cursor: move;
     transition: all 0.3s ease;
-    height: 36px;
+    height: var(--node-height);       /* was 36px */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -248,7 +290,7 @@ body {
     white-space: nowrap;
     text-overflow: ellipsis;
     line-height: 1.1;
-}
+  }
 
 .project-bar:hover {
     transform: translateY(-2px);
@@ -268,10 +310,10 @@ body {
     word-wrap: break-word;
     text-overflow: initial;
     height: auto;
-    min-height: 36px;
+    min-height: var(--node-height); /* was 36px */
     padding: 6px 8px;
     line-height: 1.2;
-}
+  }
 
 .api-key-modal, .import-modal, .custom-color-modal {
     display: none;
