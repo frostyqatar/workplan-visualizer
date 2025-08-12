@@ -10,6 +10,13 @@ let draggedProject = null;
 let dragStartX = 0;
 let dragStartLeft = 0;
 let projectOrder = []; // Track the order of projects
+let autoWrap = false; // Wrap text in bars and auto-size their heights
+// Add to global state
+let openMenuProjectId = null;
+let openMenuElement = null;
+// New UI state
+let spacingScale = 1;   // 0.6–2.0 squeeze/breeze multiplier
+let todayOn = false;    // Today line toggle
 
 // Professional consulting color palettes
 const colorPalettes = {
@@ -23,10 +30,137 @@ const colorPalettes = {
     accenture: ['#a100ff', '#7b00cc', '#5500aa', '#9933ff', '#b366ff', '#cc99ff', '#e6ccff', '#4d0080']
 };
 
-// Add to global state
-let openMenuProjectId = null;
-let openMenuElement = null;
+function toggleWrap() {
+    autoWrap = !autoWrap;
+    const btn = document.getElementById('toggleWrapBtn');
+    if (btn) btn.textContent = autoWrap ? 'Wrap: On' : 'Wrap: Off';
+    renderTimeline();
+  }
 
+// Helpers
+function clamp(n, min, max) { return Math.min(Math.max(n, min), max); }
+function cssNum(varName, fallback) {
+  const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? parseFloat(fallback) : parsed;
+}
+function addLayoutControls() {
+    const controls = document.querySelector('.controls-section');
+    if (!controls || controls.dataset.enhanced === 'true') return;
+    controls.dataset.enhanced = 'true';
+  
+    const frag = document.createDocumentFragment();
+  
+    function mkBtn(label, handler, id) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-secondary';
+      b.textContent = label;
+      if (id) b.id = id;
+      b.addEventListener('click', handler);
+      return b;
+    }
+  
+   
+    frag.appendChild(mkBtn(autoWrap ? 'Wrap: On' : 'Wrap: Off', toggleWrap, 'toggleWrapBtn'));
+    controls.insertBefore(frag, controls.firstChild);
+  }
+  
+  function makeInputChatlike() {
+    // Find the "Add Project" button by its onclick
+    const sendBtn = Array.from(document.querySelectorAll('button'))
+      .find(b => (b.getAttribute('onclick') || '').includes('processProject'));
+    if (sendBtn) {
+      sendBtn.textContent = 'Send';
+      sendBtn.classList.add('send-btn'); // styling from CSS
+    }
+  }
+
+// Node height and text size adjusters (use CSS variables)
+function adjustNodeHeight(delta) {
+  let h = cssNum('--node-height', '36') + delta;
+  h = clamp(h, 20, 100);
+  document.documentElement.style.setProperty('--node-height', h + 'px');
+  renderTimeline(); // keep container height in sync
+}
+
+function adjustTextSize(delta) {
+  let f = cssNum('--node-font-size', '0.8') + delta;
+  f = clamp(f, 0.6, 1.6);
+  document.documentElement.style.setProperty('--node-font-size', f + 'rem');
+}
+
+// Breathing space between rows
+function squeezeSpacing() {
+  spacingScale = clamp(spacingScale - 0.1, 0.6, 2);
+  renderTimeline();
+}
+
+function breezeSpacing() {
+  spacingScale = clamp(spacingScale + 0.1, 0.6, 2);
+  renderTimeline();
+}
+function ensureTodayLineElement() {
+    const content = document.getElementById('timelineContent');
+    if (!content) return null;
+    let el = document.getElementById('todayLine');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'todayLine';
+      el.className = 'today-line'; // dashed style comes from CSS
+      content.appendChild(el);
+    }
+    return el;
+  }
+  
+  function toggleTodayLine() {
+    todayOn = !todayOn;
+    const line = ensureTodayLineElement();
+    if (!line) return;
+    line.style.display = todayOn ? 'block' : 'none';
+    const btn = document.getElementById('toggleTodayBtn');
+    if (btn) btn.textContent = todayOn ? 'Today: On' : 'Today: Off';
+    if (todayOn) positionTodayLine();
+  }
+  
+  function positionTodayLine() {
+    const content = document.getElementById('timelineContent');
+    const line = ensureTodayLineElement();
+    if (!content || !line) return;
+  
+    const { startDate, endDate, totalDuration } = getCurrentViewWindow();
+    const today = new Date();
+  
+    if (today < startDate || today > endDate) {
+      line.style.display = 'none';
+      return;
+    } else if (todayOn) {
+      line.style.display = 'block';
+    }
+  
+    const frac = clamp((today - startDate) / totalDuration, 0, 1);
+    // Percent-based so it stays aligned regardless of scroll or resize
+    line.style.left = (frac * 100) + '%';
+  }
+// Current view window (start, end, full width)
+function getCurrentViewWindow() {
+  let startDate, endDate, fullWidth;
+  if (currentView === 'quarter') {
+    let startMonth, endMonth;
+    if (currentQuarter === 1) { startMonth = 0; endMonth = 2; }
+    else if (currentQuarter === 2) { startMonth = 3; endMonth = 5; }
+    else if (currentQuarter === 3) { startMonth = 6; endMonth = 8; }
+    else { startMonth = 9; endMonth = 11; }
+    startDate = new Date(currentYear, startMonth, 1);
+    endDate = new Date(currentYear, endMonth + 1, 0);
+    fullWidth = 600;
+  } else {
+    startDate = new Date(currentYear - 1, 10, 1); // Nov 1 last year
+    endDate = new Date(currentYear, 11, 31);      // Dec 31 current year
+    fullWidth = 1400;
+  }
+  return { startDate, endDate, fullWidth, totalDuration: endDate - startDate };
+}
 function init() {
     updatePeriodDisplay();
     renderTimeline();
@@ -35,7 +169,12 @@ function init() {
     loadColorPalette();
     loadCustomPalettes();
     initializeProjectListDragAndDrop();
-}
+  
+    // New
+    addLayoutControls();
+    makeInputChatlike && makeInputChatlike();
+    window.addEventListener('resize', () => { if (todayOn) positionTodayLine(); });
+  }
 
 function getCurrentQuarter() {
     const now = new Date();
@@ -698,127 +837,159 @@ function updatePeriodDisplay() {
 function renderTimeline() {
     const monthsContainer = document.getElementById('timelineMonths');
     const contentContainer = document.getElementById('timelineContent');
-    
-    let months, startDate, endDate, totalDuration;
-    
+  
+    let months, startDate, endDate;
+  
     if (currentView === 'quarter') {
-        // Show specific quarter
-        let quarterMonths;
-        let startMonth, endMonth;
-        
-        if (currentQuarter === 1) {
-            quarterMonths = ['Jan', 'Feb', 'Mar'];
-            startMonth = 0; endMonth = 2;
-        } else if (currentQuarter === 2) {
-            quarterMonths = ['Apr', 'May', 'Jun'];
-            startMonth = 3; endMonth = 5;
-        } else if (currentQuarter === 3) {
-            quarterMonths = ['Jul', 'Aug', 'Sep'];
-            startMonth = 6; endMonth = 8;
-        } else {
-            quarterMonths = ['Oct', 'Nov', 'Dec'];
-            startMonth = 9; endMonth = 11;
-        }
-        
-        months = quarterMonths.map(month => `${month} ${currentYear}`);
-        startDate = new Date(currentYear, startMonth, 1);
-        endDate = new Date(currentYear, endMonth + 1, 0);
-        monthsContainer.style.minWidth = '600px';
-        contentContainer.style.minWidth = '600px';
-        
+      let quarterMonths, startMonth, endMonth;
+      if (currentQuarter === 1) { quarterMonths = ['Jan', 'Feb', 'Mar']; startMonth = 0; endMonth = 2; }
+      else if (currentQuarter === 2) { quarterMonths = ['Apr', 'May', 'Jun']; startMonth = 3; endMonth = 5; }
+      else if (currentQuarter === 3) { quarterMonths = ['Jul', 'Aug', 'Sep']; startMonth = 6; endMonth = 8; }
+      else { quarterMonths = ['Oct', 'Nov', 'Dec']; startMonth = 9; endMonth = 11; }
+  
+      months = quarterMonths.map(m => `${m} ${currentYear}`);
+      startDate = new Date(currentYear, startMonth, 1);
+      endDate = new Date(currentYear, endMonth + 1, 0);
+      monthsContainer.style.minWidth = '600px';
+      contentContainer.style.minWidth = '600px';
+  
     } else {
-        // Show 14-month view: Nov-Dec of last year + Jan-Dec of current year
-        months = [
-            `Nov ${currentYear - 1}`, `Dec ${currentYear - 1}`,
-            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-        ].map((month, index) => {
-            if (index >= 2) return `${month} ${currentYear}`;
-            return month;
-        });
-        
-        startDate = new Date(currentYear - 1, 10, 1); // Nov 1st of last year
-        endDate = new Date(currentYear, 11, 31); // Dec 31st of current year
-        monthsContainer.style.minWidth = '1400px';
-        contentContainer.style.minWidth = '1400px';
+      months = [
+        `Nov ${currentYear - 1}`, `Dec ${currentYear - 1}`,
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ].map((month, index) => index >= 2 ? `${month} ${currentYear}` : month);
+  
+      startDate = new Date(currentYear - 1, 10, 1);
+      endDate = new Date(currentYear, 11, 31);
+      monthsContainer.style.minWidth = '1400px';
+      contentContainer.style.minWidth = '1400px';
     }
-    
-    totalDuration = endDate - startDate;
-    
-    monthsContainer.innerHTML = months.map(month => 
-        `<div class="month-label">${month}</div>`
+  
+    const totalDuration = endDate - startDate;
+  
+    monthsContainer.innerHTML = months.map(month =>
+      `<div class="month-label">${month}</div>`
     ).join('');
-
-    // Clear existing projects
-    const existingProjects = contentContainer.querySelectorAll('.project-bar');
-    existingProjects.forEach(p => p.remove());
-
-    // Filter projects that overlap with the current view period
-    const visibleProjects = projects.filter(project => 
-        !(project.endDate < startDate || project.startDate > endDate)
+  
+    // Clear bars
+    contentContainer.querySelectorAll('.project-bar').forEach(p => p.remove());
+  
+    // Filter projects in view
+    const visibleProjects = projects.filter(project =>
+      !(project.endDate < startDate || project.startDate > endDate)
     );
-
-    // Calculate smart positions for overlapping projects
+  
+    // Positions with row indices
     const projectPositions = calculateProjectPositions(visibleProjects, startDate, totalDuration);
-    
-    // Calculate timeline height based on number of rows needed
     const maxRow = Math.max(0, ...projectPositions.map(p => p.row));
-    const rowHeight = 45; // Height per row
-    const baseHeight = 100; // Base padding
-    const timelineHeight = Math.max(350, (maxRow + 1) * rowHeight + baseHeight);
-    contentContainer.style.minHeight = timelineHeight + 'px';
-
-    // Render projects with smart positioning
+  
+    // Content width in pixels (for text width logic when wrap is OFF)
+    const contentWidthPx =
+      contentContainer.clientWidth ||
+      parseFloat(getComputedStyle(contentContainer).minWidth) ||
+      (currentView === 'quarter' ? 600 : 1400);
+  
+    const createdBars = [];
+    const baseTop = 50;
+    const baseRowHeight = 45;
+    const nodeHeightPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--node-height')) || 36;
+  
+    // When wrap is OFF, derive a uniform rowHeight that never goes under node height + gap
+    const minGap = 8;
+    const uniformRowHeight = Math.max(Math.round(baseRowHeight * (typeof spacingScale === 'number' ? spacingScale : 1)), nodeHeightPx + minGap);
+  
+    // Create bars once (we’ll position precisely afterward if autoWrap is ON)
     projectPositions.forEach(({ project, row, left, width }) => {
-        const projectBar = document.createElement('div');
-        projectBar.className = 'project-bar';
-        projectBar.dataset.projectId = project.id;
-        projectBar.style.backgroundColor = project.color;
-        projectBar.style.left = left + '%';
-        projectBar.style.width = width + '%';
-        projectBar.style.top = (50 + row * rowHeight) + 'px';
-        projectBar.style.position = 'absolute';
-        
-        // Smart text handling based on width
-        const actualWidth = (width / 100) * (currentView === 'quarter' ? 600 : 1400);
+      const bar = document.createElement('div');
+      bar.className = 'project-bar';
+      bar.dataset.projectId = project.id;
+      bar.style.backgroundColor = project.color;
+      bar.style.left = left + '%';
+      bar.style.width = width + '%';
+      bar.style.position = 'absolute';
+  
+      // Text content
+      if (autoWrap) {
+        bar.classList.add('project-bar-multiline'); // enables height:auto and wrapping
+        bar.textContent = project.name;             // natural wrap, no manual <br>
+      } else {
+        const actualWidth = (width / 100) * contentWidthPx;
         if (actualWidth > 120) {
-            // Wide enough for multiline text
-            projectBar.classList.add('project-bar-multiline');
-            projectBar.innerHTML = wrapTextForWidth(project.name, actualWidth - 16);
+          bar.classList.add('project-bar-multiline');
+          bar.innerHTML = wrapTextForWidth(project.name, actualWidth - 16);
         } else {
-            // Single line with ellipsis
-            projectBar.textContent = project.name;
+          bar.textContent = project.name;
         }
-        
-        projectBar.title = `${project.name}\n${project.startDate.toDateString()} - ${project.endDate.toDateString()}\nDrag to change dates`;
-        
-        // Add drag event listeners
-        addDragListeners(projectBar, project, startDate, totalDuration);
-        
-        // Add double-click event for menu
-        projectBar.addEventListener('dblclick', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // Remove any open menu
-            closeSemicircleMenu();
-            // Show menu for this bar
-            openMenuProjectId = project.id;
-            openMenuElement = projectBar;
-            showSemicircleMenu(projectBar, project);
-        });
-        
-        // Render marker icon if set
-        if (project.marker) {
-            const iconSpan = document.createElement('span');
-            iconSpan.className = 'icon-marker';
-            iconSpan.innerHTML = getMarkerIconHTML(project.marker);
-            projectBar.appendChild(iconSpan);
-        }
-        
-        contentContainer.appendChild(projectBar);
+      }
+  
+      bar.title = `${project.name}\n${project.startDate.toDateString()} - ${project.endDate.toDateString()}\nDrag to change dates`;
+  
+      // Drag
+      addDragListeners(bar, project, startDate, totalDuration);
+  
+      // Semicircle menu
+      bar.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSemicircleMenu();
+        openMenuProjectId = project.id;
+        openMenuElement = bar;
+        showSemicircleMenu(bar, project);
+      });
+  
+      // Marker icon
+      if (project.marker) {
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'icon-marker';
+        iconSpan.innerHTML = getMarkerIconHTML(project.marker);
+        bar.appendChild(iconSpan);
+      }
+  
+      contentContainer.appendChild(bar);
+      createdBars.push({ el: bar, row });
     });
-}
-
+  
+    if (autoWrap) {
+      // Two-pass layout: measure tallest bar per row, then stack rows
+      const rows = maxRow + 1;
+      const rowHeights = Array(rows).fill(0);
+      createdBars.forEach(({ el, row }) => {
+        const h = el.offsetHeight || nodeHeightPx;
+        rowHeights[row] = Math.max(rowHeights[row], h);
+      });
+  
+      const gap = Math.max(2, Math.round(10 * (typeof spacingScale === 'number' ? spacingScale : 1)));
+      const rowTops = [];
+      let accTop = baseTop;
+      for (let r = 0; r < rows; r++) {
+        rowTops[r] = accTop;
+        accTop += rowHeights[r] + gap;
+      }
+  
+      createdBars.forEach(({ el, row }) => {
+        el.style.top = rowTops[row] + 'px';
+      });
+  
+      const baseBottom = 100;
+      const totalHeight = accTop + baseBottom;
+      contentContainer.style.minHeight = Math.max(350, totalHeight) + 'px';
+  
+    } else {
+      // Uniform row spacing
+      const baseBottom = 100;
+      const timelineHeight = Math.max(350, (maxRow + 1) * uniformRowHeight + baseBottom);
+      contentContainer.style.minHeight = timelineHeight + 'px';
+  
+      createdBars.forEach(({ el, row }) => {
+        el.style.top = (baseTop + row * uniformRowHeight) + 'px';
+      });
+    }
+  
+    // Today line
+    ensureTodayLineElement && ensureTodayLineElement();
+    if (todayOn && typeof positionTodayLine === 'function') positionTodayLine();
+  }
 function wrapTextForWidth(text, maxWidth) {
     if (maxWidth < 80) return text;
     
@@ -1080,113 +1251,55 @@ function renderProjects() {
     });
 }
 
-function downloadPNG() {
-    const element = document.getElementById('timelineGrid');
-    let startDate, endDate, totalDuration, fullWidth;
-    if (currentView === 'quarter') {
-        let startMonth, endMonth;
-        if (currentQuarter === 1) {
-            startMonth = 0; endMonth = 2;
-        } else if (currentQuarter === 2) {
-            startMonth = 3; endMonth = 5;
-        } else if (currentQuarter === 3) {
-            startMonth = 6; endMonth = 8;
-        } else {
-            startMonth = 9; endMonth = 11;
-        }
-        startDate = new Date(currentYear, startMonth, 1);
-        endDate = new Date(currentYear, endMonth + 1, 0);
-        fullWidth = 600;
-    } else {
-        startDate = new Date(currentYear - 1, 10, 1);
-        endDate = new Date(currentYear, 11, 31);
-        fullWidth = 1400;
-    }
-    totalDuration = endDate - startDate;
-    const visibleProjects = projects.filter(project => 
-        !(project.endDate < startDate || project.startDate > endDate)
-    );
-    if (visibleProjects.length === 0) {
-        showError('No projects visible in current view to capture.');
-        return;
-    }
-    const projectPositions = calculateProjectPositions(visibleProjects, startDate, totalDuration);
-    const maxRow = Math.max(0, ...projectPositions.map(p => p.row));
-    const optimalHeight = Math.max(400, (maxRow + 1) * 45 + 150);
-
-    // Store original styles for restoration
-    const originalStyles = new Map();
-    const timelineContent = document.getElementById('timelineContent');
-    const monthsContainer = document.getElementById('timelineMonths');
-
-    // Save original styles
-    originalStyles.set('element-overflow', element.style.overflow);
-    originalStyles.set('element-width', element.style.width);
-    originalStyles.set('timelineContent-minHeight', timelineContent.style.minHeight);
-    originalStyles.set('timelineContent-width', timelineContent.style.width);
-    originalStyles.set('monthsContainer-minWidth', monthsContainer.style.minWidth);
-    originalStyles.set('monthsContainer-width', monthsContainer.style.width);
-
-    // Set styles for full capture
-    element.style.overflow = 'visible';
-    element.style.width = fullWidth + 'px';
-    timelineContent.style.minHeight = optimalHeight + 'px';
-    timelineContent.style.width = fullWidth + 'px';
-    monthsContainer.style.minWidth = fullWidth + 'px';
-    monthsContainer.style.width = fullWidth + 'px';
-
-    // Enhance styles for screenshot
-    enhanceStylesForScreenshot(originalStyles);
-    element.offsetHeight;
-
-    html2canvas(element, {
+async function downloadPNG() {
+    const grid = document.getElementById('timelineGrid');
+    if (!grid) return;
+  
+    // Hide UI chrome during export (requires small CSS you added earlier)
+    document.body.classList.add('exporting');
+  
+    // Expand to full scroll size so nothing is clipped
+    const prev = {
+      overflow: grid.style.overflow,
+      width: grid.style.width,
+      height: grid.style.height
+    };
+    const contentWidth = grid.scrollWidth;
+    const contentHeight = grid.scrollHeight;
+  
+    grid.style.overflow = 'visible';
+    grid.style.width = contentWidth + 'px';
+    grid.style.height = contentHeight + 'px';
+  
+    try {
+      const canvas = await html2canvas(grid, {
         backgroundColor: '#ffffff',
-        scale: 2,
-        width: fullWidth,
-        height: optimalHeight,
+        width: contentWidth,
+        height: contentHeight,
+        windowWidth: contentWidth,
+        windowHeight: contentHeight,
         scrollX: 0,
         scrollY: 0,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        removeContainer: true,
-        foreignObjectRendering: false,
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-            const clonedBars = clonedDoc.querySelectorAll('.project-bar');
-            clonedBars.forEach(bar => {
-                bar.style.whiteSpace = 'normal';
-                bar.style.wordWrap = 'break-word';
-                bar.style.textAlign = 'center';
-                bar.style.justifyContent = 'center';
-            });
-        }
-    }).then(canvas => {
-        // Restore original styles
-        restoreOriginalStyles(originalStyles);
-        element.style.overflow = originalStyles.get('element-overflow') || '';
-        element.style.width = originalStyles.get('element-width') || '';
-        timelineContent.style.minHeight = originalStyles.get('timelineContent-minHeight') || '';
-        timelineContent.style.width = originalStyles.get('timelineContent-width') || '';
-        monthsContainer.style.minWidth = originalStyles.get('monthsContainer-minWidth') || '';
-        monthsContainer.style.width = originalStyles.get('monthsContainer-width') || '';
-        const link = document.createElement('a');
-        link.download = `workplan-${currentView}-${currentYear}-${new Date().toISOString().split('T')[0]}.png`;
-        link.href = canvas.toDataURL('image/png', 1.0);
-        link.click();
-        showSuccess('High-quality timeline downloaded as PNG!');
-    }).catch(error => {
-        restoreOriginalStyles(originalStyles);
-        element.style.overflow = originalStyles.get('element-overflow') || '';
-        element.style.width = originalStyles.get('element-width') || '';
-        timelineContent.style.minHeight = originalStyles.get('timelineContent-minHeight') || '';
-        timelineContent.style.width = originalStyles.get('timelineContent-width') || '';
-        monthsContainer.style.minWidth = originalStyles.get('monthsContainer-minWidth') || '';
-        monthsContainer.style.width = originalStyles.get('monthsContainer-width') || '';
-        console.error('Download failed:', error);
-        showError('Failed to download PNG. Please try again.');
-    });
-}
+        scale: Math.min(2, (4096 / Math.max(contentWidth, contentHeight)) || 1),
+        useCORS: true
+      });
+  
+      const link = document.createElement('a');
+      const period = document.getElementById('currentPeriod')?.textContent?.trim().replace(/\s+/g, '_') || 'timeline';
+      link.download = `${period}_${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+    } catch (err) {
+      console.error('PNG export failed:', err);
+      showError('Failed to download PNG. Please try again.');
+    } finally {
+      // Restore styles and UI
+      grid.style.overflow = prev.overflow;
+      grid.style.width = prev.width;
+      grid.style.height = prev.height;
+      document.body.classList.remove('exporting');
+    }
+  }
 
 function enhanceStylesForScreenshot(originalStyles) {
     // Enhance timeline background for better visibility
