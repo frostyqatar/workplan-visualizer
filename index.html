@@ -1,170 +1,166 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Workplan Visualizer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Workplan Visualizer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-    <div class="header">
-        <h1>Workplan Visualizer</h1>
-    </div>
-
-    <div class="input-section">
-        <div class="color-palette-section">
-            <label class="palette-label">Color Palette:</label>
-            <select id="colorPalette" class="color-selector" onchange="updateColorPalette()">
-                <option value="mckinsey">McKinsey & Company</option>
-                <option value="bcg">Boston Consulting Group</option>
-                <option value="bain">Bain & Company</option>
-                <option value="deloitte">Deloitte</option>
-                <option value="pwc">PwC</option>
-                <option value="kpmg">KPMG</option>
-                <option value="ey">Ernst & Young</option>
-                <option value="accenture">Accenture</option>
-                <option value="custom">➕ Create Custom Palette</option>
-            </select>
-        </div>
-        
- <!-- In the existing input-group, change the button text -->
-<div class="input-group">
-    <input type="text" id="projectInput" class="input-field" 
-           placeholder="Type a project (e.g., 'Robin Jan–Sept; CC tasks Q4 2025; Zaynab Q3 2026')"
-           onkeypress="handleEnterKey(event)">
-    <button onclick="processProject()" class="btn-primary send-btn">Send</button>
-    <button onclick="showApiKeyModal()" class="btn-secondary">Change API Key</button>
+  <div class="header">
+    <h1>Workplan Visualizer</h1>
   </div>
-        <div class="error-message" id="errorMessage"></div>
-        <div class="success-message" id="successMessage"></div>
-        <div class="loading" id="loading">Processing with AI...</div>
+
+  <div class="input-section">
+    <div class="color-palette-section">
+      <label class="palette-label">Color Palette:</label>
+      <select id="colorPalette" class="color-selector" onchange="updateColorPalette()">
+        <option value="mckinsey">McKinsey & Company</option>
+        <option value="bcg">Boston Consulting Group</option>
+        <option value="bain">Bain & Company</option>
+        <option value="deloitte">Deloitte</option>
+        <option value="pwc">PwC</option>
+        <option value="kpmg">KPMG</option>
+        <option value="ey">Ernst & Young</option>
+        <option value="accenture">Accenture</option>
+        <option value="custom">➕ Create Custom Palette</option>
+      </select>
     </div>
 
-    <div class="timeline-container">
-        <div class="timeline-header">
-            <h2>Timeline View</h2>
-            <div class="year-navigation">
-                <button class="nav-arrow" onclick="navigatePeriod(-1)">←</button>
-                <div class="current-year" id="currentPeriod">2025</div>
-                <button class="nav-arrow" onclick="navigatePeriod(1)">→</button>
-            </div>
-        </div>
-        
-        <div class="timeline-view">
-            <div class="view-selector">
-                <button class="view-btn active" onclick="setView('year')" id="yearBtn">14-Month View</button>
-                <button class="view-btn" onclick="setView('quarter')" id="quarterBtn">Quarterly View</button>
-            </div>
-            
-        <!-- In the controls-section, add the new buttons before the existing export buttons -->
-<div class="controls-section">
-    <!-- New layout controls -->
-    <button class="btn-secondary" onclick="adjustNodeHeight(-4)">− Node</button>
-    <button class="btn-secondary" onclick="adjustNodeHeight(4)">+ Node</button>
-    
-    <button class="btn-secondary" onclick="adjustTextSize(-0.1)">− Text</button>
-    <button class="btn-secondary" onclick="adjustTextSize(0.1)">+ Text</button>
-  
-    <button class="btn-secondary" onclick="squeezeSpacing()">Squeeze</button>
-    <button class="btn-secondary" onclick="breezeSpacing()">Breeze</button>
-  
-    <button class="btn-secondary" id="toggleTodayBtn" onclick="toggleTodayLine()">Today: Off</button>
-  
-    <!-- Existing export/import/clear -->
-    <button onclick="downloadPNG()" class="btn-secondary">📥 Download PNG</button>
-    <button onclick="exportData()" class="btn-secondary">📤 Export Data</button>
-    <button onclick="showImportModal()" class="btn-secondary">📤 Import Data</button>
-    <button onclick="clearAllProjects()" class="btn-secondary" style="background: #c62828;">🗑️ Clear All</button>
+    <div class="input-group">
+      <input type="text" id="projectInput" class="input-field"
+             placeholder="Type a project (e.g., 'Robin Jan–Sept; CC tasks Q4 2025; Zaynab Q3 2026')"
+             onkeypress="handleEnterKey(event)">
+      <button onclick="processProject()" class="btn-primary send-btn">Send</button>
+      <button onclick="showApiKeyModal()" class="btn-secondary">Change API Key</button>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+    <div class="success-message" id="successMessage"></div>
+    <div class="loading" id="loading">Processing with AI...</div>
   </div>
-            
-            <div class="timeline-grid" id="timelineGrid">
-                <div class="timeline-months" id="timelineMonths"></div>
-                <div class="timeline-content" id="timelineContent">
-                    <div class="quarter-indicator q1"></div>
-                    <div class="quarter-indicator q2"></div>
-                    <div class="quarter-indicator q3"></div>
-                    <div class="quarter-indicator q4"></div>
-                    <div id="todayLine" class="today-line"></div>
-                </div>
-            </div>
-            
-            <div class="drag-instruction">💡 Drag project bars to change their dates | Drag projects in the list to reorder</div>
-            
-            <div class="projects-list" id="projectsList"></div>
-        </div>
+
+  <div class="timeline-container">
+    <div class="timeline-header">
+      <h2>Timeline View</h2>
+      <div class="year-navigation">
+        <button class="nav-arrow" onclick="navigatePeriod(-1)">←</button>
+        <div class="current-year" id="currentPeriod">2025</div>
+        <button class="nav-arrow" onclick="navigatePeriod(1)">→</button>
+      </div>
     </div>
 
-    <!-- API Key Modal -->
-    <div class="api-key-modal" id="apiKeyModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Google Gemini API Key Required</h3>
-                <p>Please enter your Google Gemini API key to process natural language project inputs.</p>
-            </div>
-            <div class="input-group">
-                <input type="password" id="apiKeyInput" class="input-field" 
-                       placeholder="Enter your Gemini API key">
-                <button onclick="saveApiKey()" class="btn-primary">Save</button>
-            </div>
+    <div class="timeline-view">
+      <div class="view-selector">
+        <button class="view-btn active" onclick="setView('year')" id="yearBtn">14-Month View</button>
+        <button class="view-btn" onclick="setView('quarter')" id="quarterBtn">Quarterly View</button>
+      </div>
+
+      <div class="controls-section">
+        <button class="btn-secondary" onclick="adjustNodeHeight(-4)">− Node</button>
+        <button class="btn-secondary" onclick="adjustNodeHeight(4)">+ Node</button>
+        <button class="btn-secondary" onclick="adjustTextSize(-0.1)">− Text</button>
+        <button class="btn-secondary" onclick="adjustTextSize(0.1)">+ Text</button>
+        <button class="btn-secondary" onclick="squeezeSpacing()">Squeeze</button>
+        <button class="btn-secondary" onclick="breezeSpacing()">Breeze</button>
+        <button class="btn-secondary" id="toggleWrapBtn" onclick="toggleWrap()">Wrap: Off</button>
+        <button class="btn-secondary" id="toggleTodayBtn" onclick="toggleTodayLine()">Today: Off</button>
+        <button onclick="downloadPNG()" class="btn-secondary">📥 Download PNG</button>
+        <button onclick="exportData()" class="btn-secondary">📤 Export Data</button>
+        <button onclick="showImportModal()" class="btn-secondary">📤 Import Data</button>
+        <button onclick="clearAllProjects()" class="btn-secondary" style="background:#c62828;">🗑️ Clear All</button>
+      </div>
+
+      <div class="timeline-grid" id="timelineGrid">
+        <div class="timeline-months" id="timelineMonths"></div>
+        <div class="timeline-content" id="timelineContent">
+          <div class="quarter-indicator q1"></div>
+          <div class="quarter-indicator q2"></div>
+          <div class="quarter-indicator q3"></div>
+          <div class="quarter-indicator q4"></div>
+          <div id="todayLine" class="today-line"></div>
         </div>
-    </div>
+      </div>
 
-    <!-- Import Modal -->
-    <div class="import-modal" id="importModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Import Project Data</h3>
-                <p>Paste your exported JSON data below:</p>
-            </div>
-            <textarea id="importData" placeholder="Paste JSON data here..."></textarea>
-            <div class="modal-buttons">
-                <button onclick="closeImportModal()" class="btn-secondary">Cancel</button>
-                <button onclick="importProjects()" class="btn-primary">Import</button>
-            </div>
+      <div class="drag-instruction">💡 Drag project bars to change dates | Drag projects in the list to reorder</div>
+
+      <div class="projects-list" id="projectsList"></div>
+    </div>
+  </div>
+
+  <!-- API Key Modal -->
+  <div class="api-key-modal" id="apiKeyModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Google Gemini API Key Required</h3>
+        <p>Please enter your Google Gemini API key to process natural language project inputs.</p>
+      </div>
+      <div class="input-group">
+        <input type="password" id="apiKeyInput" class="input-field" placeholder="Enter your Gemini API key">
+        <button onclick="saveApiKey()" class="btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="import-modal" id="importModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Import Project Data</h3>
+        <p>Paste your exported JSON data below:</p>
+      </div>
+      <textarea id="importData" placeholder="Paste JSON data here..."></textarea>
+      <div class="modal-buttons">
+        <button onclick="closeImportModal()" class="btn-secondary">Cancel</button>
+        <button onclick="importProjects()" class="btn-primary">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Color Modal -->
+  <div class="custom-color-modal" id="customColorModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create Custom Color Palette</h3>
+        <p>Choose 4 colors for your custom palette:</p>
+      </div>
+
+      <input type="text" id="paletteName" class="color-palette-name" placeholder="Enter palette name (e.g., 'My Company Colors')">
+
+      <div class="color-input-grid">
+        <div class="color-input-item">
+          <label>Color 1</label>
+          <input type="color" id="color1" value="#0E4B91">
         </div>
-    </div>
-
-    <!-- Custom Color Modal -->
-    <div class="custom-color-modal" id="customColorModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Create Custom Color Palette</h3>
-                <p>Choose 4 colors for your custom palette:</p>
-            </div>
-            
-            <input type="text" id="paletteName" class="color-palette-name" placeholder="Enter palette name (e.g., 'My Company Colors')">
-            
-            <div class="color-input-grid">
-                <div class="color-input-item">
-                    <label>Color 1</label>
-                    <input type="color" id="color1" value="#0E4B91">
-                </div>
-                <div class="color-input-item">
-                    <label>Color 2</label>
-                    <input type="color" id="color2" value="#2D61A3">
-                </div>
-                <div class="color-input-item">
-                    <label>Color 3</label>
-                    <input type="color" id="color3" value="#4C77B5">
-                </div>
-                <div class="color-input-item">
-                    <label>Color 4</label>
-                    <input type="color" id="color4" value="#6B8BC7">
-                </div>
-            </div>
-            
-            <div id="existingCustomPalettes"></div>
-            
-            <div class="modal-buttons">
-                <button onclick="closeCustomColorModal()" class="btn-secondary">Cancel</button>
-                <button onclick="saveCustomPalette()" class="btn-primary">Save Palette</button>
-            </div>
+        <div class="color-input-item">
+          <label>Color 2</label>
+          <input type="color" id="color2" value="#2D61A3">
         </div>
+        <div class="color-input-item">
+          <label>Color 3</label>
+          <input type="color" id="color3" value="#4C77B5">
+        </div>
+        <div class="color-input-item">
+          <label>Color 4</label>
+          <input type="color" id="color4" value="#6B8BC7">
+        </div>
+      </div>
+
+      <div id="existingCustomPalettes"></div>
+
+      <div class="modal-buttons">
+        <button onclick="closeCustomColorModal()" class="btn-secondary">Cancel</button>
+        <button onclick="saveCustomPalette()" class="btn-primary">Save Palette</button>
+      </div>
     </div>
+  </div>
 
-    <input type="file" id="fileInput" class="file-input" accept=".json" onchange="handleFileImport(event)">
+  <!-- Context menu -->
+  <div id="nodeContextMenu" class="context-menu hidden"></div>
 
-    <script src="script.js"></script>
+  <input type="file" id="fileInput" class="file-input" accept=".json" onchange="handleFileImport(event)">
+
+  <script src="script.js"></script>
 </body>
 </html>
