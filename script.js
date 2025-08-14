@@ -1,5 +1,9 @@
+/* Workplan Visualizer - script.js
+   Rewritten: single-file, zoom + fixed context menu + other UX improvements
+*/
+
 /* =============== State =============== */
-let currentYear = 2025;
+let currentYear = new Date().getFullYear();
 let currentQuarter = getCurrentQuarter();
 let currentView = 'year';
 let projects = [];
@@ -14,6 +18,7 @@ let openMenuElement = null;
 let autoWrap = false;      // Wrap text and auto-size node heights
 let spacingScale = 1;      // 0.6–2.0 squeeze/breeze multiplier affecting row gap and top padding
 let todayOn = false;       // Today line toggle
+let hiddenMonthsLeft = 0;  // Zoom: number of months hidden from the left in Year view (0-13)
 
 /* =============== Palettes =============== */
 const colorPalettes = {
@@ -37,6 +42,7 @@ function cssNum(varName, fallback) {
 function debounce(fn, ms) {
   let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
 }
+function id(v) { return document.getElementById(v); }
 
 function getCurrentQuarter() {
   const now = new Date(); const m = now.getMonth();
@@ -46,11 +52,43 @@ function getCurrentQuarter() {
 /* =============== Init =============== */
 function init() {
   updatePeriodDisplay();
-  renderTimeline();
-  renderProjects();
   loadProjectsFromStorage();
   loadColorPalette();
   loadCustomPalettes();
+  renderProjects();
+  renderTimeline();
+
+  // Add Zoom +/- controls (injected by JS so it integrates with existing layout)
+  const zoomHost =
+    document.querySelector('.year-navigation') ||
+    document.querySelector('.timeline-header') ||
+    document.querySelector('.controls-section') ||
+    document.body;
+  if (zoomHost && !document.getElementById('zoomControls')) {
+    const wrap = document.createElement('div');
+    wrap.id = 'zoomControls';
+    wrap.style.display = 'flex';
+    wrap.style.gap = '8px';
+    wrap.style.alignItems = 'center';
+    wrap.style.marginLeft = '8px';
+    wrap.innerHTML = `
+      <button id="zoomOutBtn" class="nav-arrow" title="Zoom out">🔍−</button>
+      <button id="zoomInBtn" class="nav-arrow" title="Zoom in">🔍+</button>
+    `;
+    zoomHost.insertBefore(wrap, zoomHost.firstChild);
+
+    const maxHidden = 13; // allow hiding up to 13 months (14-month canvas -> keep at least 1 month visible)
+    id('zoomInBtn').onclick = () => {
+      if (currentView !== 'year') setView('year');
+      hiddenMonthsLeft = Math.min(hiddenMonthsLeft + 1, maxHidden);
+      renderTimeline();
+    };
+    id('zoomOutBtn').onclick = () => {
+      hiddenMonthsLeft = Math.max(hiddenMonthsLeft - 1, 0);
+      renderTimeline();
+    };
+  }
+
   initializeProjectListDragAndDrop();
 
   // Keep layout robust on resize/zoom
@@ -59,7 +97,7 @@ function init() {
     renderTimeline();
   }, 120));
 
-  // Context menu: close on global actions
+  // Close context menu on global actions
   ['scroll', 'click', 'resize'].forEach(ev =>
     window.addEventListener(ev, () => closeContextMenu(), { passive: true })
   );
@@ -85,16 +123,16 @@ function breezeSpacing() { spacingScale = clamp(spacingScale + 0.1, 0.6, 2); ren
 
 function toggleWrap() {
   autoWrap = !autoWrap;
-  const btn = document.getElementById('toggleWrapBtn');
+  const btn = id('toggleWrapBtn');
   if (btn) btn.textContent = autoWrap ? 'Wrap: On' : 'Wrap: Off';
   renderTimeline();
 }
 
 /* =============== Today line =============== */
 function ensureTodayLineElement() {
-  const content = document.getElementById('timelineContent');
+  const content = id('timelineContent');
   if (!content) return null;
-  let el = document.getElementById('todayLine');
+  let el = id('todayLine');
   if (!el) {
     el = document.createElement('div');
     el.id = 'todayLine';
@@ -109,13 +147,13 @@ function toggleTodayLine() {
   const line = ensureTodayLineElement();
   if (!line) return;
   line.style.display = todayOn ? 'block' : 'none';
-  const btn = document.getElementById('toggleTodayBtn');
+  const btn = id('toggleTodayBtn');
   if (btn) btn.textContent = todayOn ? 'Today: On' : 'Today: Off';
   if (todayOn) positionTodayLine();
 }
 
 function positionTodayLine() {
-  const content = document.getElementById('timelineContent');
+  const content = id('timelineContent');
   const line = ensureTodayLineElement();
   if (!content || !line) return;
 
@@ -141,7 +179,8 @@ function getCurrentViewWindow() {
     endDate = new Date(currentYear, endMonth + 1, 0);
     fullWidth = 600;
   } else {
-    startDate = new Date(currentYear - 1, 10, 1);
+    // Year view: start at Nov of previous year + hiddenMonthsLeft months (zoom)
+    startDate = new Date(currentYear - 1, 10 + hiddenMonthsLeft, 1);
     endDate = new Date(currentYear, 11, 31);
     fullWidth = 1400;
   }
@@ -151,8 +190,8 @@ function getCurrentViewWindow() {
 function setView(view) {
   currentView = view;
   document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-  if (view === 'year') document.getElementById('yearBtn').classList.add('active');
-  else { document.getElementById('quarterBtn').classList.add('active'); currentQuarter = getCurrentQuarter(); }
+  if (view === 'year') id('yearBtn')?.classList.add('active');
+  else { id('quarterBtn')?.classList.add('active'); currentQuarter = getCurrentQuarter(); }
   updatePeriodDisplay();
   renderTimeline();
 }
@@ -169,14 +208,15 @@ function navigatePeriod(direction) {
 }
 
 function updatePeriodDisplay() {
-  const el = document.getElementById('currentPeriod');
-  el.textContent = currentView === 'year' ? currentYear : `Q${currentQuarter} ${currentYear}`;
+  const el = id('currentPeriod');
+  if (el) el.textContent = currentView === 'year' ? currentYear : `Q${currentQuarter} ${currentYear}`;
 }
 
 /* =============== Timeline =============== */
 function renderTimeline() {
-  const monthsContainer = document.getElementById('timelineMonths');
-  const contentContainer = document.getElementById('timelineContent');
+  const monthsContainer = id('timelineMonths');
+  const contentContainer = id('timelineContent');
+  if (!monthsContainer || !contentContainer) return;
 
   let months, startDate, endDate;
 
@@ -193,24 +233,30 @@ function renderTimeline() {
     monthsContainer.style.minWidth = '600px';
     contentContainer.style.minWidth = '600px';
   } else {
-    months = [
-      `Nov ${currentYear - 1}`, `Dec ${currentYear - 1}`,
-      'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
-    ].map((m, i) => i >= 2 ? `${m} ${currentYear}` : m);
-    startDate = new Date(currentYear - 1, 10, 1);
+    // Build month labels from the zoomed start to Dec current year
+    const start = new Date(currentYear - 1, 10 + hiddenMonthsLeft, 1);
+    const end = new Date(currentYear, 11, 1);
+    const labels = [];
+    let iter = new Date(start);
+    while (iter <= end) {
+      labels.push(iter.toLocaleString('en-US', { month: 'short' }) + ' ' + iter.getFullYear());
+      iter = new Date(iter.getFullYear(), iter.getMonth() + 1, 1);
+    }
+    months = labels;
+    startDate = start;
     endDate = new Date(currentYear, 11, 31);
     monthsContainer.style.minWidth = '1400px';
     contentContainer.style.minWidth = '1400px';
   }
 
   const totalDuration = endDate - startDate;
-
   monthsContainer.innerHTML = months.map(month => `<div class="month-label">${month}</div>`).join('');
   contentContainer.querySelectorAll('.project-bar').forEach(el => el.remove());
 
+  // Build visible projects and calculate positions
   const visibleProjects = projects.filter(p => !(p.endDate < startDate || p.startDate > endDate));
   const projectPositions = calculateProjectPositions(visibleProjects, startDate, totalDuration);
-  const maxRow = Math.max(0, ...projectPositions.map(p => p.row));
+  const maxRow = projectPositions.length ? Math.max(...projectPositions.map(p => p.row)) : 0;
 
   const contentWidthPx =
     contentContainer.clientWidth ||
@@ -220,14 +266,12 @@ function renderTimeline() {
   const createdBars = [];
   const nodeHeightPx = cssNum('--node-height', '36');
   const baseTopMin = 12;              // minimal padding above first row
-  const baseTop = Math.max(baseTopMin, Math.round(24 + 24 * spacingScale));  // squeeze/breeze also affects top padding
+  const baseTop = Math.max(baseTopMin, Math.round(24 + 24 * spacingScale));  // squeeze/breeze affects top padding
   const baseRowHeight = 45;           // logical row height before scaling
   const minGap = 8;
-
-  // When wrap is OFF, rows are uniform; ensure they never collide with bar height
   const uniformRowHeight = Math.max(Math.round(baseRowHeight * spacingScale), nodeHeightPx + minGap);
 
-  // Create bars (text assigned first to measure height if wrapping)
+  // Create bars
   projectPositions.forEach(({ project, row, left, width }) => {
     const bar = document.createElement('div');
     bar.className = 'project-bar';
@@ -256,7 +300,7 @@ function renderTimeline() {
     // Drag
     addDragListeners(bar, project, startDate, totalDuration);
 
-    // Double-click semicircle menu (existing behavior)
+    // Double-click semicircle menu
     bar.addEventListener('dblclick', (e) => {
       e.preventDefault(); e.stopPropagation();
       closeSemicircleMenu();
@@ -280,8 +324,8 @@ function renderTimeline() {
     createdBars.push({ el: bar, row });
   });
 
+  // Layout rows
   if (autoWrap) {
-    // Two-pass layout: measure tallest bar per row, then stack rows
     const rows = maxRow + 1;
     const rowHeights = Array(rows).fill(0);
     createdBars.forEach(({ el, row }) => {
@@ -301,9 +345,7 @@ function renderTimeline() {
     const baseBottom = 100;
     const totalHeight = accTop + baseBottom;
     contentContainer.style.minHeight = Math.max(350, totalHeight) + 'px';
-
   } else {
-    // Uniform row spacing
     const baseBottom = 100;
     const timelineHeight = Math.max(350, (maxRow + 1) * uniformRowHeight + baseBottom + baseTop);
     contentContainer.style.minHeight = timelineHeight + 'px';
@@ -328,8 +370,8 @@ function calculateProjectPositions(visibleProjects, startDate, totalDuration) {
   });
 
   sorted.forEach(project => {
-    const projectStart = Math.max(project.startDate, startDate);
-    const projectEnd = Math.min(project.endDate, new Date(startDate.getTime() + totalDuration));
+    const projectStart = project.startDate < startDate ? startDate : project.startDate;
+    const projectEnd = project.endDate > new Date(startDate.getTime() + totalDuration) ? new Date(startDate.getTime() + totalDuration) : project.endDate;
     if (projectEnd <= projectStart) return;
 
     const startPercent = ((projectStart - startDate) / totalDuration) * 100;
@@ -352,11 +394,10 @@ function calculateProjectPositions(visibleProjects, startDate, totalDuration) {
   return projectPositions;
 }
 
-/* =============== Node drag (robust, no duplicate listeners) =============== */
+/* =============== Node drag (robust) =============== */
 function addDragListeners(projectBar, project, viewStartDate, totalDuration) {
   const onPointerDown = (e) => {
     if (e.button !== 0) return; // left click only
-    const rect = projectBar.getBoundingClientRect();
     const container = projectBar.parentElement;
     const startX = e.clientX;
     const startLeft = parseFloat(projectBar.style.left) || 0;
@@ -407,7 +448,8 @@ function wrapTextForWidth(text, maxWidth) {
 
 /* =============== Projects list (with quick add) =============== */
 function renderProjects() {
-  const container = document.getElementById('projectsList');
+  const container = id('projectsList');
+  if (!container) return;
 
   const sorted = [...projects].sort((a, b) => projectOrder.indexOf(a.id) - projectOrder.indexOf(b.id));
   const listHtml = sorted.map(project => `
@@ -443,7 +485,7 @@ function renderProjects() {
     ${projects.length ? listHtml : '<p style="text-align:center;color:#666;">No projects yet. Use Send above or Add Project here.</p>'}
   `;
 
-  // Draggable items
+  // Make each project draggable in the list
   sorted.forEach(project => {
     const el = document.querySelector(`[data-project-id="${project.id}"]`);
     if (el) makeProjectDraggable(el, project.id);
@@ -451,16 +493,16 @@ function renderProjects() {
 }
 
 function addProjectFromList() {
-  const name = document.getElementById('qaName').value.trim();
-  const start = document.getElementById('qaStart').value;
-  const end = document.getElementById('qaEnd').value;
-  const desc = document.getElementById('qaDesc').value.trim();
+  const name = id('qaName')?.value.trim() || '';
+  const start = id('qaStart')?.value;
+  const end = id('qaEnd')?.value;
+  const desc = id('qaDesc')?.value.trim() || '';
   if (!name || !start || !end) { showError('Please enter name, start, and end.'); return; }
   addProject({ name, startDate: start, endDate: end, description: desc });
-  document.getElementById('qaName').value = '';
-  document.getElementById('qaStart').value = '';
-  document.getElementById('qaEnd').value = '';
-  document.getElementById('qaDesc').value = '';
+  if (id('qaName')) id('qaName').value = '';
+  if (id('qaStart')) id('qaStart').value = '';
+  if (id('qaEnd')) id('qaEnd').value = '';
+  if (id('qaDesc')) id('qaDesc').value = '';
   showSuccess('Project added.');
 }
 
@@ -494,7 +536,8 @@ function getCurrentPalette() {
 function getProjectColor(index) { const palette = getCurrentPalette(); return palette[index % palette.length]; }
 
 function updateColorPalette() {
-  const val = document.getElementById('colorPalette').value;
+  const val = id('colorPalette')?.value;
+  if (!val) return;
   if (val === 'custom') { showCustomColorModal(); return; }
   currentColorPalette = val;
   projects.forEach((p, i) => p.color = getProjectColor(i));
@@ -540,7 +583,7 @@ function reorderAndUpdateProjects() {
   projects.forEach((p, i) => { p.color = getProjectColor(i); p.order = i; });
 }
 
-/* Title and date editing (unchanged behavior) */
+/* Title and date editing */
 function editProjectTitle(projectId) {
   if (editingTitleProjectId && editingTitleProjectId !== projectId) cancelTitleEdit();
   if (editingProjectId && editingProjectId !== projectId) cancelDateEdit();
@@ -552,7 +595,7 @@ function editProjectTitle(projectId) {
 
   el.innerHTML = `
     <div class="editing" onclick="event.stopPropagation()">
-      <input type="text" class="title-input" id="titleInput-${projectId}" value="${p.name}" onclick="event.stopPropagation()" onkeypress="handleTitleKeyPress(event, ${projectId})">
+      <input type="text" class="title-input" id="titleInput-${projectId}" value="${escapeHtml(p.name)}" onclick="event.stopPropagation()" onkeypress="handleTitleKeyPress(event, ${projectId})">
       <div class="title-edit-buttons">
         <button class="title-edit-btn" onclick="event.stopPropagation(); saveTitleEdit(${projectId})">Save</button>
         <button class="title-edit-btn cancel" onclick="event.stopPropagation(); cancelTitleEdit()">Cancel</button>
@@ -560,48 +603,48 @@ function editProjectTitle(projectId) {
     </div>`;
   el.classList.add('editing');
 
-  setTimeout(() => { const input = document.getElementById(`titleInput-${projectId}`); if (input) { input.focus(); input.select(); } }, 50);
+  setTimeout(() => { const input = id(`titleInput-${projectId}`); if (input) { input.focus(); input.select(); } }, 50);
 }
-function handleTitleKeyPress(e, id) { if (e.key === 'Enter') saveTitleEdit(id); else if (e.key === 'Escape') cancelTitleEdit(); }
-function saveTitleEdit(id) {
-  const input = document.getElementById(`titleInput-${id}`);
+function handleTitleKeyPress(e, idv) { if (e.key === 'Enter') saveTitleEdit(idv); else if (e.key === 'Escape') cancelTitleEdit(); }
+function saveTitleEdit(idv) {
+  const input = id(`titleInput-${idv}`);
   if (!input) return showError('Title input missing.');
   const val = input.value.trim(); if (!val) return showError('Project name cannot be empty.');
-  const p = projects.find(x => x.id === id); if (p) { p.name = val; editingTitleProjectId = null; saveProjectsToStorage(); renderProjects(); renderTimeline(); showSuccess('Name updated.'); }
+  const p = projects.find(x => x.id === idv); if (p) { p.name = val; editingTitleProjectId = null; saveProjectsToStorage(); renderProjects(); renderTimeline(); showSuccess('Name updated.'); }
 }
 function cancelTitleEdit() { editingTitleProjectId = null; renderProjects(); }
 
-function editProjectDates(id) {
-  if (editingProjectId && editingProjectId !== id) cancelDateEdit();
-  if (editingTitleProjectId && editingTitleProjectId !== id) cancelTitleEdit();
+function editProjectDates(idv) {
+  if (editingProjectId && editingProjectId !== idv) cancelDateEdit();
+  if (editingTitleProjectId && editingTitleProjectId !== idv) cancelTitleEdit();
 
-  editingProjectId = id;
-  const el = document.querySelector(`[data-project-id="${id}"] .project-dates`);
-  const p = projects.find(x => x.id === id);
+  editingProjectId = idv;
+  const el = document.querySelector(`[data-project-id="${idv}"] .project-dates`);
+  const p = projects.find(x => x.id === idv);
   if (!el || !p) return;
 
   const s = p.startDate.toISOString().split('T')[0];
   const e = p.endDate.toISOString().split('T')[0];
   el.innerHTML = `
     <div class="editing" onclick="event.stopPropagation()">
-      <input type="date" class="date-input" id="startDate-${id}" value="${s}" onclick="event.stopPropagation()">
+      <input type="date" class="date-input" id="startDate-${idv}" value="${s}" onclick="event.stopPropagation()">
       <span> to </span>
-      <input type="date" class="date-input" id="endDate-${id}" value="${e}" onclick="event.stopPropagation()">
+      <input type="date" class="date-input" id="endDate-${idv}" value="${e}" onclick="event.stopPropagation()">
       <div class="date-edit-buttons">
-        <button class="date-edit-btn" onclick="event.stopPropagation(); saveDateEdit(${id})">Save</button>
+        <button class="date-edit-btn" onclick="event.stopPropagation(); saveDateEdit(${idv})">Save</button>
         <button class="date-edit-btn cancel" onclick="event.stopPropagation(); cancelDateEdit()">Cancel</button>
       </div>
     </div>`;
   el.classList.add('editing');
-  setTimeout(() => document.getElementById(`startDate-${id}`)?.focus(), 50);
+  setTimeout(() => id(`startDate-${idv}`)?.focus(), 50);
 }
-function saveDateEdit(id) {
-  const s = document.getElementById(`startDate-${id}`)?.value;
-  const e = document.getElementById(`endDate-${id}`)?.value;
+function saveDateEdit(idv) {
+  const s = id(`startDate-${idv}`)?.value;
+  const e = id(`endDate-${idv}`)?.value;
   if (!s || !e) return showError('Enter both start and end.');
   const sD = new Date(s), eD = new Date(e);
   if (sD >= eD) return showError('End must be after start.');
-  const p = projects.find(x => x.id === id);
+  const p = projects.find(x => x.id === idv);
   if (p) { p.startDate = sD; p.endDate = eD; saveProjectsToStorage(); renderProjects(); renderTimeline(); showSuccess('Dates updated.'); }
   editingProjectId = null;
 }
@@ -610,13 +653,13 @@ function cancelDateEdit() { editingProjectId = null; renderProjects(); }
 /* =============== Drag & drop in All Projects =============== */
 function initializeProjectListDragAndDrop() {
   document.addEventListener('dragover', (e) => { e.preventDefault(); });
-  document.addEventListener('drop', (e) => { e.preventDefault(); const ph = document.getElementById('drag-placeholder'); if (ph && ph.parentNode) ph.parentNode.removeChild(ph); });
+  document.addEventListener('drop', (e) => { e.preventDefault(); document.getElementById('drag-placeholder')?.remove(); });
 }
-function makeProjectDraggable(el, id) {
+function makeProjectDraggable(el, idv) {
   el.draggable = true;
   el.addEventListener('dragstart', (e) => {
     el.classList.add('dragging');
-    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.setData('text/plain', idv);
     e.dataTransfer.effectAllowed = 'move';
     const ph = document.createElement('div');
     ph.className = 'project-item'; ph.style.opacity = '0.5'; ph.style.border = '2px dashed var(--blue-80)';
@@ -671,11 +714,12 @@ function getDragAfterElement(container, y) {
 /* =============== Context menu on nodes =============== */
 function openContextMenu(e, barEl, project) {
   e.preventDefault();
+  e.stopPropagation();
   closeContextMenu();
 
-  const menu = document.getElementById('nodeContextMenu');
+  const menu = id('nodeContextMenu');
+  if (!menu) return;
   const palette = getCurrentPalette();
-
   const colorSwatches = palette.map(c => `<div class="color-swatch" data-color="${c}" style="background:${c}"></div>`).join('');
   menu.innerHTML = `
     <div class="ctx-section">
@@ -716,15 +760,15 @@ function openContextMenu(e, barEl, project) {
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
 
-  // Handlers
-  menu.addEventListener('click', (ev) => {
+  // Single assignment to prevent multiple listeners
+  menu.onclick = (ev) => {
+    ev.stopPropagation();
     const target = ev.target;
     const action = target.getAttribute('data-action');
     const swatch = target.closest('.color-swatch');
     const marker = target.getAttribute('data-marker');
 
     if (action === 'edit-name') {
-      // scroll to list item and open title edit
       scrollToProjectAndEdit(project.id);
       closeContextMenu();
       return;
@@ -761,18 +805,18 @@ function openContextMenu(e, barEl, project) {
       saveProjectsToStorage(); renderTimeline();
       closeContextMenu();
     }
-  });
+  };
 }
 function closeContextMenu() {
-  const menu = document.getElementById('nodeContextMenu');
-  if (menu) { menu.classList.add('hidden'); menu.innerHTML = ''; }
+  const menu = id('nodeContextMenu');
+  if (menu) { menu.classList.add('hidden'); menu.innerHTML = ''; menu.onclick = null; }
 }
 
-/* =============== API-driven "Send" =============== */
+/* =============== API-driven "Send" (stubbed parser) =============== */
 function handleEnterKey(e) { if (e.key === 'Enter') processProject(); }
 
 function processProject() {
-  const input = document.getElementById('projectInput').value.trim();
+  const input = id('projectInput')?.value.trim();
   if (!input) return;
   if (!apiKey) { showApiKeyModal(); return; }
   showLoading(true); hideMessages();
@@ -788,9 +832,10 @@ function getCurrentQuarterDates() {
   return { start: s.toISOString().split('T')[0], end: e.toISOString().split('T')[0] };
 }
 
+// Example safe implementation; adjust endpoint & parsing to your model's response shape
 async function callGeminiAPI(input) {
   const quarterDates = getCurrentQuarterDates();
-  const prompt = `You are a project parser... (same as before, omitted here for brevity)`;
+  const prompt = `You are a project parser. Return JSON array of projects {name,startDate,endDate,description?}. Use ISO dates. Context quarterStart=${quarterDates.start} quarterEnd=${quarterDates.end}. Text: ${input}`;
 
   try {
     const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', {
@@ -802,34 +847,54 @@ async function callGeminiAPI(input) {
     const data = await response.json();
     if (data.error) throw new Error(`API Error: ${data.error.message}`);
 
+    // Try to extract candidate text (model dependent)
+    let text = '';
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      const text = data.candidates[0].content.parts[0].text || '';
-      let cleaned = text.replace(/```json\n?|\n?```/g, '').trim().replace(/^[^\[]*(\[.*\])[^\]]*$/s, '$1');
-      let arr;
-      try { arr = JSON.parse(cleaned); } catch { showError('Failed to parse AI response.'); showLoading(false); return; }
-      if (!Array.isArray(arr)) { showError('AI response is not an array.'); showLoading(false); return; }
-      let added = 0;
-      arr.forEach(p => {
-        if (!p.name || !p.startDate || !p.endDate) return;
-        const s = new Date(p.startDate), e = new Date(p.endDate);
-        if (isNaN(s) || isNaN(e)) return;
-        addProject(p); added++;
-      });
-      document.getElementById('projectInput').value = '';
-      hideMessages();
-      if (added) showSuccess(`Added ${added} project${added>1?'s':''}.`); else showError('No valid projects found.');
-    } else {
-      showError('No valid response from AI. Check your API key.');
+      text = data.candidates[0].content.parts[0].text || '';
+    } else if (data.output && data.output[0]) {
+      text = data.output[0].content || '';
+    } else if (data.result) {
+      text = JSON.stringify(data.result);
     }
+
+    // Clean and attempt to parse JSON blob from text
+    let cleaned = text.replace(/[\u2018\u2019\u201C\u201D]/g, '"').replace(/\r/g, '\n');
+    // Try to extract first JSON array/object
+    const arrMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (!arrMatch) throw new Error('No JSON found in AI response.');
+    cleaned = arrMatch[0];
+    let arr;
+    try { arr = JSON.parse(cleaned); } catch (e) { throw new Error('Failed to parse AI JSON response.'); }
+
+    if (!Array.isArray(arr)) arr = [arr];
+    let added = 0;
+    arr.forEach(p => {
+      if (!p.name || !p.startDate || !p.endDate) return;
+      const s = new Date(p.startDate), e = new Date(p.endDate);
+      if (isNaN(s) || isNaN(e)) return;
+      addProject({
+        name: p.name,
+        startDate: s.toISOString().split('T')[0],
+        endDate: e.toISOString().split('T')[0],
+        description: p.description || ''
+      });
+      added++;
+    });
+
+    if (id('projectInput')) id('projectInput').value = '';
+    hideMessages();
+    if (added) showSuccess(`Added ${added} project${added>1 ? 's' : ''}.`); else showError('No valid projects found.');
   } catch (err) {
-    console.error(err); showError('API call failed: ' + err.message);
+    console.error(err);
+    showError('API call failed: ' + err.message);
+  } finally {
+    showLoading(false);
   }
-  showLoading(false);
 }
 
 /* =============== Export / Import / Storage =============== */
 async function downloadPNG() {
-  const grid = document.getElementById('timelineGrid');
+  const grid = id('timelineGrid') || id('timelineContent');
   if (!grid) return;
   document.body.classList.add('exporting');
 
@@ -850,7 +915,7 @@ async function downloadPNG() {
       useCORS: true
     });
     const a = document.createElement('a');
-    const period = document.getElementById('currentPeriod')?.textContent?.trim().replace(/\s+/g, '_') || 'timeline';
+    const period = id('currentPeriod')?.textContent?.trim().replace(/\s+/g, '_') || 'timeline';
     a.download = `${period}_${new Date().toISOString().slice(0,10)}.png`;
     a.href = canvas.toDataURL('image/png', 1.0);
     a.click();
@@ -878,16 +943,16 @@ function exportData() {
   showSuccess('Exported.');
 }
 
-function showImportModal() { document.getElementById('importModal').style.display = 'block'; }
-function closeImportModal() { document.getElementById('importModal').style.display = 'none'; document.getElementById('importData').value=''; }
+function showImportModal() { id('importModal').style.display = 'block'; }
+function closeImportModal() { id('importModal').style.display = 'none'; id('importData').value=''; }
 function handleFileImport(e) {
   const file = e.target.files?.[0]; if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { document.getElementById('importData').value = reader.result; showImportModal(); };
+  reader.onload = () => { id('importData').value = reader.result; showImportModal(); };
   reader.readAsText(file);
 }
 function importProjects() {
-  const str = document.getElementById('importData').value.trim();
+  const str = id('importData')?.value.trim();
   if (!str) return showError('Paste JSON to import.');
   try {
     const data = JSON.parse(str);
@@ -911,7 +976,7 @@ function importProjects() {
     if (Array.isArray(data.projectOrder)) projectOrder = data.projectOrder;
     if (data.currentYear) currentYear = data.currentYear;
     if (data.currentQuarter) currentQuarter = data.currentQuarter;
-    if (data.colorPalette) { currentColorPalette = data.colorPalette; document.getElementById('colorPalette').value = currentColorPalette; saveColorPalette(); }
+    if (data.colorPalette) { currentColorPalette = data.colorPalette; id('colorPalette') && (id('colorPalette').value = currentColorPalette); saveColorPalette(); }
 
     reorderAndUpdateProjects(); updatePeriodDisplay(); saveProjectsToStorage();
     renderProjects(); renderTimeline(); closeImportModal(); showSuccess(`Imported ${projects.length} projects.`);
@@ -958,33 +1023,32 @@ function loadProjectsFromStorage() {
 function saveColorPalette() { localStorage.setItem('workplanColorPalette', currentColorPalette); }
 function loadColorPalette() {
   const stored = localStorage.getItem('workplanColorPalette');
-  if (stored) { currentColorPalette = stored; document.getElementById('colorPalette').value = currentColorPalette; }
+  if (stored) { currentColorPalette = stored; if (id('colorPalette')) id('colorPalette').value = currentColorPalette; }
 }
 
-/* =============== Misc UI =============== */
-function showApiKeyModal() { document.getElementById('apiKeyModal').style.display = 'block'; }
+/* =============== Misc UI / Helpers =============== */
+function showApiKeyModal() { id('apiKeyModal').style.display = 'block'; }
 function saveApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
+  const key = id('apiKeyInput')?.value.trim();
   if (key) {
     apiKey = key; localStorage.setItem('geminiApiKey', key);
-    document.getElementById('apiKeyModal').style.display = 'none';
-    document.getElementById('apiKeyInput').value = '';
-    if (document.getElementById('projectInput').value.trim()) processProject();
+    id('apiKeyModal').style.display = 'none';
+    if (id('projectInput')?.value.trim()) processProject();
   }
 }
 
-function showLoading(b) { document.getElementById('loading').style.display = b ? 'block' : 'none'; }
-function showError(m) { const el = document.getElementById('errorMessage'); el.textContent = m; el.style.display = 'block'; setTimeout(hideMessages, 5000); }
-function showSuccess(m) { const el = document.getElementById('successMessage'); el.textContent = m; el.style.display = 'block'; setTimeout(hideMessages, 3000); }
-function hideMessages() { document.getElementById('errorMessage').style.display = 'none'; document.getElementById('successMessage').style.display = 'none'; }
+function showLoading(b) { if (id('loading')) id('loading').style.display = b ? 'block' : 'none'; }
+function showError(m) { const el = id('errorMessage'); if (!el) return alert(m); el.textContent = m; el.style.display = 'block'; setTimeout(hideMessages, 5000); }
+function showSuccess(m) { const el = id('successMessage'); if (!el) return console.info(m); el.textContent = m; el.style.display = 'block'; setTimeout(hideMessages, 3000); }
+function hideMessages() { id('errorMessage') && (id('errorMessage').style.display = 'none'); id('successMessage') && (id('successMessage').style.display = 'none'); }
 
-function scrollToProjectAndEdit(id) {
-  const el = document.querySelector(`[data-project-id="${id}"]`);
+function scrollToProjectAndEdit(idv) {
+  const el = document.querySelector(`[data-project-id="${idv}"]`);
   if (!el) return showError('Project not found.');
   if (editingTitleProjectId) cancelTitleEdit();
   if (editingProjectId) cancelDateEdit();
   el.scrollIntoView({ behavior:'smooth', block:'center', inline:'nearest' });
-  setTimeout(() => { editProjectTitle(id); }, 350);
+  setTimeout(() => { editProjectTitle(idv); }, 350);
 }
 
 function getMarkerIconHTML(marker) {
@@ -994,7 +1058,7 @@ function getMarkerIconHTML(marker) {
   return '';
 }
 
-/* Semicircle quick menu (kept from previous UX) */
+/* Semicircle quick menu */
 function showSemicircleMenu(bar, project) {
   closeSemicircleMenu();
   const menu = document.createElement('div');
@@ -1015,6 +1079,8 @@ function showSemicircleMenu(bar, project) {
     };
   });
   bar.appendChild(menu);
+  openMenuElement = bar;
+  openMenuProjectId = project.id;
   setTimeout(() => document.addEventListener('mousedown', handleMenuOutsideClick, { once: true }), 0);
 }
 function closeSemicircleMenu() {
@@ -1028,9 +1094,9 @@ function handleMenuOutsideClick(e) { if (openMenuElement && !openMenuElement.con
 
 /* Close modals + editing when clicking outside */
 window.onclick = function(ev) {
-  const apiModal = document.getElementById('apiKeyModal');
-  const importModal = document.getElementById('importModal');
-  const customColorModal = document.getElementById('customColorModal');
+  const apiModal = id('apiKeyModal');
+  const importModal = id('importModal');
+  const customColorModal = id('customColorModal');
   if (ev.target === apiModal) apiModal.style.display = 'none';
   if (ev.target === importModal) closeImportModal();
   if (ev.target === customColorModal) closeCustomColorModal?.();
@@ -1038,12 +1104,13 @@ window.onclick = function(ev) {
   if (editingTitleProjectId && !ev.target.closest('.project-name.editing') && !ev.target.closest('.title-edit-btn')) cancelTitleEdit();
 };
 
-/* Custom palettes (unchanged helpers) */
-function showCustomColorModal() { document.getElementById('customColorModal').style.display = 'block'; loadExistingCustomPalettes(); }
-function closeCustomColorModal() { document.getElementById('customColorModal').style.display = 'none'; document.getElementById('colorPalette').value = currentColorPalette; }
+/* Custom palettes */
+function showCustomColorModal() { id('customColorModal').style.display = 'block'; loadExistingCustomPalettes(); }
+function closeCustomColorModal() { id('customColorModal').style.display = 'none'; id('colorPalette') && (id('colorPalette').value = currentColorPalette); }
 function loadExistingCustomPalettes() {
-  const container = document.getElementById('existingCustomPalettes');
+  const container = id('existingCustomPalettes');
   const custom = JSON.parse(localStorage.getItem('customColorPalettes') || '{}');
+  if (!container) return;
   if (Object.keys(custom).length === 0) { container.innerHTML = ''; return; }
   container.innerHTML = '<h4 style="margin:1rem 0 0.5rem 0;color:var(--primary-blue);">Existing Custom Palettes:</h4>';
   Object.entries(custom).forEach(([key, colors]) => {
@@ -1061,13 +1128,13 @@ function loadExistingCustomPalettes() {
   });
 }
 function saveCustomPalette() {
-  const name = document.getElementById('paletteName').value.trim();
+  const name = id('paletteName')?.value.trim();
   if (!name) return showError('Enter a name for your custom palette.');
-  const colors = [color1.value, color2.value, color3.value, color4.value];
+  const colors = [id('color1')?.value, id('color2')?.value, id('color3')?.value, id('color4')?.value].map(c => c || '#cccccc');
   const all = JSON.parse(localStorage.getItem('customColorPalettes') || '{}');
   const key = 'custom_' + name.toLowerCase().replace(/\s+/g, '_');
   all[key] = colors; localStorage.setItem('customColorPalettes', JSON.stringify(all));
-  loadCustomPalettes(); currentColorPalette = key; document.getElementById('colorPalette').value = key;
+  loadCustomPalettes(); currentColorPalette = key; id('colorPalette') && (id('colorPalette').value = key);
   projects.forEach((p, i) => p.color = getProjectColor(i));
   closeCustomColorModal(); saveColorPalette(); saveProjectsToStorage(); renderTimeline();
   showSuccess(`Custom palette "${name}" created and applied!`);
@@ -1084,7 +1151,8 @@ function deleteCustomPalette(key) {
   loadCustomPalettes(); loadExistingCustomPalettes(); showSuccess('Custom palette deleted.');
 }
 function loadCustomPalettes() {
-  const select = document.getElementById('colorPalette');
+  const select = id('colorPalette');
+  if (!select) return;
   const all = JSON.parse(localStorage.getItem('customColorPalettes') || '{}');
   Array.from(select.options).forEach(opt => { if (opt.value.startsWith('custom_')) opt.remove(); });
   const createOpt = select.querySelector('option[value="custom"]');
@@ -1095,4 +1163,10 @@ function loadCustomPalettes() {
   });
 }
 
-init();
+/* Utilities */
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, function (m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; });
+}
+
+/* Init on load */
+document.addEventListener('DOMContentLoaded', init);
