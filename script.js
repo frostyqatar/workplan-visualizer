@@ -19,6 +19,9 @@ let autoWrap = false;      // Wrap text and auto-size node heights
 let spacingScale = 1;      // 0.6–2.0 squeeze/breeze multiplier affecting row gap and top padding
 let todayOn = false;       // Today line toggle
 let hiddenMonthsLeft = 0;  // Zoom: number of months hidden from the left in Year view (0-13)
+let currentDensity = 'comfortable';
+let theme = localStorage.getItem('wpTheme') || 'light';
+let filterQuery = '';
 
 /* =============== Palettes =============== */
 const colorPalettes = {
@@ -57,6 +60,25 @@ function init() {
   loadCustomPalettes();
   renderProjects();
   renderTimeline();
+
+  // Apply theme
+  applyTheme(theme);
+  const themeBtn = document.getElementById('themeToggleBtn');
+  if (themeBtn) themeBtn.textContent = (theme === 'dark') ? '☀️' : '🌙';
+
+  // Density buttons
+  syncDensityButtons();
+
+  // Filter hookup
+  const filterInput = document.getElementById('filterInput');
+  if (filterInput) {
+    filterInput.value = filterQuery;
+    filterInput.addEventListener('input', debounce((e) => {
+      filterQuery = (e.target.value || '').toLowerCase();
+      renderProjects();
+      renderTimeline();
+    }, 150));
+  }
 
   // Add Zoom +/- controls (injected by JS so it integrates with existing layout)
   const zoomHost =
@@ -101,6 +123,21 @@ function init() {
   ['scroll', 'click', 'resize'].forEach(ev =>
     window.addEventListener(ev, () => closeContextMenu(), { passive: true })
   );
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea') return;
+    if (e.key === 'w' || e.key === 'W') { toggleWrap(); }
+    if (e.key === 't' || e.key === 'T') { toggleTodayLine(); }
+    if (e.key === 'y' || e.key === 'Y') { setView('year'); }
+    if (e.key === 'q' || e.key === 'Q') { setView('quarter'); }
+    if (e.key === 'ArrowLeft') { navigatePeriod(-1); }
+    if (e.key === 'ArrowRight') { navigatePeriod(1); }
+    if (e.key === '+') { if (currentView !== 'year') setView('year'); hiddenMonthsLeft = Math.min(hiddenMonthsLeft + 1, 13); renderTimeline(); }
+    if (e.key === '-') { hiddenMonthsLeft = Math.max(hiddenMonthsLeft - 1, 0); renderTimeline(); }
+    if (e.key === '?') { showHelpModal(); }
+  });
 }
 
 /* =============== Controls =============== */
@@ -254,7 +291,9 @@ function renderTimeline() {
   contentContainer.querySelectorAll('.project-bar').forEach(el => el.remove());
 
   // Build visible projects and calculate positions
-  const visibleProjects = projects.filter(p => !(p.endDate < startDate || p.startDate > endDate));
+  const visibleProjects = projects
+    .filter(p => !(p.endDate < startDate || p.startDate > endDate))
+    .filter(p => !filterQuery || p.name.toLowerCase().includes(filterQuery) || (p.description||'').toLowerCase().includes(filterQuery));
   const projectPositions = calculateProjectPositions(visibleProjects, startDate, totalDuration);
   const maxRow = projectPositions.length ? Math.max(...projectPositions.map(p => p.row)) : 0;
 
@@ -266,10 +305,11 @@ function renderTimeline() {
   const createdBars = [];
   const nodeHeightPx = cssNum('--node-height', '36');
   const baseTopMin = 12;              // minimal padding above first row
-  const baseTop = Math.max(baseTopMin, Math.round(24 + 24 * spacingScale));  // squeeze/breeze affects top padding
+  const densityScale = currentDensity === 'compact' ? 0.8 : 1;
+  const baseTop = Math.max(baseTopMin, Math.round((24 + 24 * spacingScale) * densityScale));  // squeeze/breeze affects top padding
   const baseRowHeight = 45;           // logical row height before scaling
   const minGap = 8;
-  const uniformRowHeight = Math.max(Math.round(baseRowHeight * spacingScale), nodeHeightPx + minGap);
+  const uniformRowHeight = Math.max(Math.round(baseRowHeight * spacingScale * densityScale), nodeHeightPx + minGap);
 
   // Create bars
   projectPositions.forEach(({ project, row, left, width }) => {
@@ -333,7 +373,7 @@ function renderTimeline() {
       rowHeights[row] = Math.max(rowHeights[row], h);
     });
 
-    const gap = Math.max(4, Math.round(10 * spacingScale));
+    const gap = Math.max(4, Math.round(10 * spacingScale * densityScale));
     const rowTops = [];
     let accTop = baseTop;
     for (let r = 0; r < rows; r++) {
@@ -451,7 +491,9 @@ function renderProjects() {
   const container = id('projectsList');
   if (!container) return;
 
-  const sorted = [...projects].sort((a, b) => projectOrder.indexOf(a.id) - projectOrder.indexOf(b.id));
+  const sorted = [...projects]
+    .sort((a, b) => projectOrder.indexOf(a.id) - projectOrder.indexOf(b.id))
+    .filter(p => !filterQuery || p.name.toLowerCase().includes(filterQuery) || (p.description||'').toLowerCase().includes(filterQuery));
   const listHtml = sorted.map(project => `
     <div class="project-item" style="border-left-color:${project.color}" data-project-id="${project.id}">
       <div class="drag-handle">⋮⋮</div>
@@ -474,7 +516,7 @@ function renderProjects() {
   `).join('');
 
   container.innerHTML = `
-    <h3>All Projects (${projects.length}) - Click names or dates to edit | Drag to reorder</h3>
+    <h3>All Projects (${sorted.length}/${projects.length}) - Click names or dates to edit | Drag to reorder</h3>
     <div class="quick-add">
       <input id="qaName" type="text" placeholder="Project name">
       <input id="qaStart" type="date">
@@ -544,6 +586,7 @@ function updateColorPalette() {
   saveColorPalette();
   saveProjectsToStorage();
   renderTimeline();
+  renderPalettePreview();
 }
 
 function deleteProject(id) {
@@ -1024,6 +1067,7 @@ function saveColorPalette() { localStorage.setItem('workplanColorPalette', curre
 function loadColorPalette() {
   const stored = localStorage.getItem('workplanColorPalette');
   if (stored) { currentColorPalette = stored; if (id('colorPalette')) id('colorPalette').value = currentColorPalette; }
+  renderPalettePreview();
 }
 
 /* =============== Misc UI / Helpers =============== */
@@ -1097,9 +1141,11 @@ window.onclick = function(ev) {
   const apiModal = id('apiKeyModal');
   const importModal = id('importModal');
   const customColorModal = id('customColorModal');
+  const helpModal = id('helpModal');
   if (ev.target === apiModal) apiModal.style.display = 'none';
   if (ev.target === importModal) closeImportModal();
   if (ev.target === customColorModal) closeCustomColorModal?.();
+  if (ev.target === helpModal) closeHelpModal();
   if (editingProjectId && !ev.target.closest('.project-dates.editing') && !ev.target.closest('.date-edit-btn')) cancelDateEdit();
   if (editingTitleProjectId && !ev.target.closest('.project-name.editing') && !ev.target.closest('.title-edit-btn')) cancelTitleEdit();
 };
@@ -1138,6 +1184,7 @@ function saveCustomPalette() {
   projects.forEach((p, i) => p.color = getProjectColor(i));
   closeCustomColorModal(); saveColorPalette(); saveProjectsToStorage(); renderTimeline();
   showSuccess(`Custom palette "${name}" created and applied!`);
+  renderPalettePreview();
 }
 function deleteCustomPalette(key) {
   if (!confirm('Delete this custom palette?')) return;
@@ -1149,6 +1196,7 @@ function deleteCustomPalette(key) {
     saveProjectsToStorage(); renderTimeline();
   }
   loadCustomPalettes(); loadExistingCustomPalettes(); showSuccess('Custom palette deleted.');
+  renderPalettePreview();
 }
 function loadCustomPalettes() {
   const select = id('colorPalette');
@@ -1170,3 +1218,44 @@ function escapeHtml(str) {
 
 /* Init on load */
 document.addEventListener('DOMContentLoaded', init);
+
+/* ======== New UI additions: theme, density, palette preview, help, reset zoom ======== */
+function toggleTheme() {
+  theme = (theme === 'dark') ? 'light' : 'dark';
+  localStorage.setItem('wpTheme', theme);
+  applyTheme(theme);
+  const themeBtn = document.getElementById('themeToggleBtn');
+  if (themeBtn) themeBtn.textContent = (theme === 'dark') ? '☀️' : '🌙';
+}
+function applyTheme(t) {
+  document.body.classList.toggle('dark', t === 'dark');
+}
+
+function setDensity(value) {
+  currentDensity = value === 'compact' ? 'compact' : 'comfortable';
+  syncDensityButtons();
+  renderTimeline();
+}
+function syncDensityButtons() {
+  const compact = document.getElementById('densityCompactBtn');
+  const comfort = document.getElementById('densityComfortBtn');
+  if (compact && comfort) {
+    compact.classList.toggle('active', currentDensity === 'compact');
+    comfort.classList.toggle('active', currentDensity === 'comfortable');
+  }
+}
+
+function renderPalettePreview() {
+  const host = document.getElementById('palettePreview');
+  if (!host) return;
+  const pal = getCurrentPalette();
+  host.innerHTML = pal.slice(0, 6).map(c => `<span class="sw" style="background:${c}"></span>`).join('');
+}
+
+function resetZoom() {
+  hiddenMonthsLeft = 0;
+  renderTimeline();
+}
+
+function showHelpModal() { const m = document.getElementById('helpModal'); if (m) m.style.display = 'block'; }
+function closeHelpModal() { const m = document.getElementById('helpModal'); if (m) m.style.display = 'none'; }

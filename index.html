@@ -10,6 +10,14 @@
 <body>
   <div class="header">
     <h1>Workplan Visualizer</h1>
+    <div class="header-actions">
+      <div class="density-toggle">
+        <button class="view-btn small" id="densityCompactBtn" onclick="setDensity('compact')" title="Compact density">Compact</button>
+        <button class="view-btn small active" id="densityComfortBtn" onclick="setDensity('comfortable')" title="Comfortable density">Comfort</button>
+      </div>
+      <button id="themeToggleBtn" class="btn-secondary" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+      <button class="btn-secondary" onclick="showHelpModal()" title="Help and shortcuts">❔ Help</button>
+    </div>
   </div>
 
   <div class="input-section">
@@ -26,6 +34,7 @@
         <option value="accenture">Accenture</option>
         <option value="custom">➕ Create Custom Palette</option>
       </select>
+      <div class="palette-preview" id="palettePreview" title="Current palette preview"></div>
     </div>
 
     <div class="input-group">
@@ -36,9 +45,13 @@
       <button onclick="showApiKeyModal()" class="btn-secondary">Change API Key</button>
     </div>
 
+      <div class="search-group">
+        <input type="text" id="filterInput" class="search-input" placeholder="Filter projects by name or description..."/>
+      </div>
+
     <div class="error-message" id="errorMessage"></div>
-    <div class="success-message" id="successMessage"></div>
-    <div class="loading" id="loading">Processing with AI...</div>
+      <div class="success-message" id="successMessage"></div>
+      <div class="loading" id="loading"><span class="spinner" aria-hidden="true"></span> Processing with AI...</div>
   </div>
 
   <div class="timeline-container">
@@ -68,7 +81,8 @@
         <button class="btn-secondary" id="toggleTodayBtn" onclick="toggleTodayLine()">Today: Off</button>
         <button onclick="downloadPNG()" class="btn-secondary">📥 Download PNG</button>
         <button onclick="exportData()" class="btn-secondary">📤 Export Data</button>
-        <button onclick="showImportModal()" class="btn-secondary">📤 Import Data</button>
+        <button onclick="showImportModal()" class="btn-secondary">📥 Import Data</button>
+        <button onclick="resetZoom()" class="btn-secondary" title="Reset zoom to full 14-month view">Reset Zoom</button>
         <button onclick="clearAllProjects()" class="btn-secondary" style="background:#c62828;">🗑️ Clear All</button>
       </div>
 
@@ -152,6 +166,30 @@
       <div class="modal-buttons">
         <button onclick="closeCustomColorModal()" class="btn-secondary">Cancel</button>
         <button onclick="saveCustomPalette()" class="btn-primary">Save Palette</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help & Shortcuts Modal -->
+  <div class="help-modal" id="helpModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Help & Shortcuts</h3>
+        <p>Quick tips to speed up your workflow.</p>
+      </div>
+      <div>
+        <ul class="help-list">
+          <li><strong>Drag</strong> project bars to move dates</li>
+          <li><strong>Double-click</strong> a bar for a quick milestone menu</li>
+          <li><strong>Right-click</strong> a bar for actions and color</li>
+          <li><strong>Enter</strong> to submit text input</li>
+          <li><strong>W</strong>: Toggle wrap • <strong>T</strong>: Toggle Today line</li>
+          <li><strong>←/→</strong>: Navigate period • <strong>Y</strong>/<strong>Q</strong>: Year/Quarter view</li>
+          <li><strong>+</strong>/<strong>-</strong>: Zoom in/out (Year view)</li>
+        </ul>
+      </div>
+      <div class="modal-buttons">
+        <button onclick="closeHelpModal()" class="btn-primary">Close</button>
       </div>
     </div>
   </div>
