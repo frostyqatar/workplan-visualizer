@@ -22,6 +22,7 @@ let hiddenMonthsLeft = 0;  // Zoom: number of months hidden from the left in Yea
 let currentDensity = 'comfortable';
 let theme = localStorage.getItem('wpTheme') || 'light';
 let filterQuery = '';
+let autoSort = true;       // New: autosort overlapping nodes into rows
 
 /* =============== Palettes =============== */
 const colorPalettes = {
@@ -37,6 +38,14 @@ const colorPalettes = {
 
 /* =============== Utils =============== */
 function clamp(n, min, max) { return Math.min(Math.max(n, min), max); }
+
+function getUniformRowHeight() {
+  const nodeHeightPx = cssNum('--node-height', '36');
+  const densityScale = currentDensity === 'compact' ? 0.8 : 1;
+  const baseRowHeight = 45;
+  const minGap = 2;
+  return Math.max(Math.round(baseRowHeight * spacingScale * densityScale), nodeHeightPx + minGap);
+}
 function cssNum(varName, fallback) {
   const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   const parsed = parseFloat(val);
@@ -155,8 +164,17 @@ function adjustTextSize(delta) {
   renderTimeline();
 }
 
-function squeezeSpacing() { spacingScale = clamp(spacingScale - 0.1, 0.6, 2); renderTimeline(); }
+function squeezeSpacing() { spacingScale = clamp(spacingScale - 0.1, 0, 2); renderTimeline(); }
 function breezeSpacing() { spacingScale = clamp(spacingScale + 0.1, 0.6, 2); renderTimeline(); }
+
+// Allow squeezing to zero
+function setSpacingScale(value) { spacingScale = clamp(value, 0, 2); renderTimeline(); }
+function toggleAutosort() {
+  autoSort = !autoSort;
+  const btn = id('toggleAutosortBtn');
+  if (btn) btn.textContent = `Autosort: ${autoSort ? 'On' : 'Off'}`;
+  renderTimeline();
+}
 
 function toggleWrap() {
   autoWrap = !autoWrap;
@@ -304,11 +322,11 @@ function renderTimeline() {
 
   const createdBars = [];
   const nodeHeightPx = cssNum('--node-height', '36');
-  const baseTopMin = 12;              // minimal padding above first row
+  const baseTopMin = 0;               // minimal padding above first row (allow zero)
   const densityScale = currentDensity === 'compact' ? 0.8 : 1;
   const baseTop = Math.max(baseTopMin, Math.round((24 + 24 * spacingScale) * densityScale));  // squeeze/breeze affects top padding
   const baseRowHeight = 45;           // logical row height before scaling
-  const minGap = 8;
+  const minGap = 2;
   const uniformRowHeight = Math.max(Math.round(baseRowHeight * spacingScale * densityScale), nodeHeightPx + minGap);
 
   // Create bars
@@ -316,7 +334,9 @@ function renderTimeline() {
     const bar = document.createElement('div');
     bar.className = 'project-bar';
     bar.dataset.projectId = project.id;
+    bar.dataset.row = String(row);
     bar.style.backgroundColor = project.color;
+    bar.style.color = getContrastColor(project.color);
     bar.style.left = left + '%';
     bar.style.width = width + '%';
     bar.style.position = 'absolute';
@@ -337,16 +357,13 @@ function renderTimeline() {
 
     bar.title = `${project.name}\n${project.startDate.toDateString()} - ${project.endDate.toDateString()}\nDrag to change dates`;
 
-    // Drag
+    // Drag (supports vertical row set when autosort is off)
     addDragListeners(bar, project, startDate, totalDuration);
 
-    // Double-click semicircle menu
+    // Double-click: inline rename on the bar
     bar.addEventListener('dblclick', (e) => {
       e.preventDefault(); e.stopPropagation();
-      closeSemicircleMenu();
-      openMenuProjectId = project.id;
-      openMenuElement = bar;
-      showSemicircleMenu(bar, project);
+      startInlineRename(bar, project);
     });
 
     // Right-click context menu
@@ -418,14 +435,18 @@ function calculateProjectPositions(visibleProjects, startDate, totalDuration) {
     const endPercent = ((projectEnd - startDate) / totalDuration) * 100;
     const width = Math.max(endPercent - startPercent, 3);
 
-    // Find first free row
+    // Determine row
     let row = 0;
-    for (;;) {
-      if (!occupiedRows[row]) occupiedRows[row] = [];
-      const buffer = 0.5;
-      const overlap = occupiedRows[row].some(o => !(endPercent <= (o.start - buffer) || startPercent >= (o.end + buffer)));
-      if (!overlap) { occupiedRows[row].push({ start: startPercent, end: endPercent }); break; }
-      row++;
+    if (autoSort) {
+      for (;;) {
+        if (!occupiedRows[row]) occupiedRows[row] = [];
+        const buffer = 0.5;
+        const overlap = occupiedRows[row].some(o => !(endPercent <= (o.start - buffer) || startPercent >= (o.end + buffer)));
+        if (!overlap) { occupiedRows[row].push({ start: startPercent, end: endPercent }); break; }
+        row++;
+      }
+    } else {
+      row = Number.isInteger(project.rowIndex) ? project.rowIndex : 0;
     }
 
     projectPositions.push({ project, row, left: Math.max(startPercent, 0), width });
@@ -434,39 +455,94 @@ function calculateProjectPositions(visibleProjects, startDate, totalDuration) {
   return projectPositions;
 }
 
+/* ===== Inline rename on bar ===== */
+function startInlineRename(bar, project) {
+  // Prevent multiple inputs
+  if (bar.querySelector('.inline-rename')) return;
+  const prevHTML = bar.innerHTML;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-rename';
+  input.value = project.name;
+  input.style.position = 'absolute';
+  input.style.left = '4px';
+  input.style.right = '4px';
+  input.style.top = '50%';
+  input.style.transform = 'translateY(-50%)';
+  input.style.border = '1px solid rgba(0,0,0,0.25)';
+  input.style.borderRadius = '4px';
+  input.style.padding = '2px 6px';
+  input.style.fontSize = getComputedStyle(bar).fontSize;
+  input.style.zIndex = 1003;
+  input.style.background = 'rgba(255,255,255,0.95)';
+  input.style.color = '#000';
+  bar.appendChild(input);
+  input.focus(); input.select();
+
+  const commit = () => {
+    const v = input.value.trim();
+    bar.removeChild(input);
+    if (v && v !== project.name) {
+      project.name = v; saveProjectsToStorage(); renderProjects(); renderTimeline();
+    } else {
+      bar.innerHTML = prevHTML;
+    }
+  };
+  const cancel = () => { bar.removeChild(input); };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') commit();
+    if (ev.key === 'Escape') cancel();
+  });
+  input.addEventListener('blur', commit);
+}
+
 /* =============== Node drag (robust) =============== */
 function addDragListeners(projectBar, project, viewStartDate, totalDuration) {
   const onPointerDown = (e) => {
     if (e.button !== 0) return; // left click only
     const container = projectBar.parentElement;
     const startX = e.clientX;
+    const startY = e.clientY;
     const startLeft = parseFloat(projectBar.style.left) || 0;
     const containerWidth = container.offsetWidth;
+    const startRow = parseInt(projectBar.dataset.row || '0', 10) || 0;
+    let deltaY = 0;
 
     projectBar.classList.add('dragging');
     document.body.style.cursor = 'grabbing';
 
     const onPointerMove = (ev) => {
-      const deltaX = ev.clientX - startX;
-      const deltaPercent = (deltaX / containerWidth) * 100;
-      const newLeft = clamp(startLeft + deltaPercent, 0, 100 - 3); // keep inside
+      const dx = ev.clientX - startX;
+      const percentDelta = (dx / containerWidth) * 100;
+      let newLeft = startLeft + percentDelta;
+      newLeft = Math.max(0, Math.min(100 - parseFloat(projectBar.style.width), newLeft));
       projectBar.style.left = newLeft + '%';
+      deltaY = ev.clientY - startY;
     };
 
     const onPointerUp = (ev) => {
       document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp, true);
+      document.removeEventListener('pointerup', onPointerUp);
       projectBar.classList.remove('dragging');
       document.body.style.cursor = 'default';
 
-      // Commit new dates
-      const newLeftPercent = parseFloat(projectBar.style.left);
-      const projectDuration = project.endDate - project.startDate;
-      const newStartTime = viewStartDate.getTime() + (newLeftPercent / 100) * totalDuration;
-      project.startDate = new Date(newStartTime);
-      project.endDate = new Date(newStartTime + projectDuration);
+      // Update dates based on newLeft
+      const leftPercent = parseFloat(projectBar.style.left);
+      const barWidthPercent = parseFloat(projectBar.style.width);
+      const newStartMs = viewStartDate.getTime() + (leftPercent / 100) * totalDuration;
+      const newEndMs = viewStartDate.getTime() + ((leftPercent + barWidthPercent) / 100) * totalDuration;
+      project.startDate = new Date(newStartMs);
+      project.endDate = new Date(newEndMs);
+
+      // When autosort is off, allow vertical row assignment based on drag deltaY
+      if (!autoSort) {
+        const rowHeight = getUniformRowHeight();
+        const rowDelta = Math.round(deltaY / Math.max(1, rowHeight));
+        const newRow = Math.max(0, startRow + rowDelta);
+        project.rowIndex = newRow;
+      }
+
       saveProjectsToStorage();
-      renderProjects();
       renderTimeline();
     };
 
@@ -558,7 +634,8 @@ function addProject(data) {
     description: data.description || '',
     color: getProjectColor(projects.length),
     order: projects.length,
-    marker: null
+    marker: null,
+    rowIndex: Number.isInteger(data.rowIndex) ? data.rowIndex : 0
   };
   projects.push(project);
   projectOrder.push(project.id);
@@ -611,7 +688,8 @@ function duplicateProject(id) {
     description: base.description,
     color: getProjectColor(projects.length),
     order: projects.length,
-    marker: base.marker || null
+    marker: base.marker || null,
+    rowIndex: Number.isInteger(base.rowIndex) ? base.rowIndex : 0
   };
   projects.push(dup);
   projectOrder.push(dup.id);
@@ -763,7 +841,7 @@ function openContextMenu(e, barEl, project) {
   const menu = id('nodeContextMenu');
   if (!menu) return;
   const palette = getCurrentPalette();
-  const colorSwatches = palette.map(c => `<div class="color-swatch" data-color="${c}" style="background:${c}"></div>`).join('');
+  const colorSwatches = palette.map(c => `<div class=\"color-swatch\" data-color=\"${c}\" style=\"background:${c}\"></div>`).join('');
   menu.innerHTML = `
     <div class="ctx-section">
       <div class="ctx-title">Actions</div>
@@ -774,7 +852,9 @@ function openContextMenu(e, barEl, project) {
     <div class="ctx-sep"></div>
     <div class="ctx-section">
       <div class="ctx-title">Color</div>
-      <div class="ctx-row">${colorSwatches}</div>
+      <div class="ctx-row">${colorSwatches}
+        <label class=\"ctx-item\" style=\"padding:4px 6px;\">Custom <input type=\"color\" id=\"ctxColorPicker\" style=\"margin-left:6px;\"></label>
+      </div>
     </div>
     <div class="ctx-sep"></div>
     <div class="ctx-section">
@@ -843,12 +923,27 @@ function openContextMenu(e, barEl, project) {
       closeContextMenu();
       return;
     }
+    if (target.id === 'ctxColorPicker') {
+      // handled by change listener
+      return;
+    }
     if (marker) {
       project.marker = (marker === 'none') ? null : marker;
       saveProjectsToStorage(); renderTimeline();
       closeContextMenu();
     }
   };
+
+  // Color picker change
+  const picker = document.getElementById('ctxColorPicker');
+  if (picker) {
+    picker.addEventListener('change', (ce) => {
+      const c = ce.target.value;
+      project.color = c;
+      saveProjectsToStorage(); renderTimeline(); renderProjects();
+      closeContextMenu();
+    }, { once: true });
+  }
 }
 function closeContextMenu() {
   const menu = id('nodeContextMenu');
@@ -861,8 +956,17 @@ function handleEnterKey(e) { if (e.key === 'Enter') processProject(); }
 function processProject() {
   const input = id('projectInput')?.value.trim();
   if (!input) return;
+  hideMessages();
+  // First try local parse; if success, skip API
+  const locallyParsed = parseProjectsLocal(input);
+  if (locallyParsed.length) {
+    locallyParsed.forEach(addProject);
+    if (id('projectInput')) id('projectInput').value = '';
+    showSuccess(`Added ${locallyParsed.length} project${locallyParsed.length>1?'s':''}.`);
+    return;
+  }
   if (!apiKey) { showApiKeyModal(); return; }
-  showLoading(true); hideMessages();
+  showLoading(true);
   callGeminiAPI(input);
 }
 
@@ -950,11 +1054,16 @@ async function downloadPNG() {
   grid.style.height = contentHeight + 'px';
 
   try {
+    const choice = prompt('PNG quality: 1=Low, 2=Medium, 3=High, 4=Ultra', '2');
+    const q = parseInt((choice || '').trim(), 10);
+    const qualityScale = clamp(isNaN(q) ? 2 : q, 1, 4);
+    const maxDim = Math.max(contentWidth, contentHeight);
+    const autoScale = Math.max(1, Math.min(qualityScale, Math.floor(8192 / Math.max(1, maxDim))));
     const canvas = await html2canvas(grid, {
       backgroundColor: '#ffffff',
       width: contentWidth, height: contentHeight,
       windowWidth: contentWidth, windowHeight: contentHeight,
-      scrollX: 0, scrollY: 0, scale: Math.min(2, (4096 / Math.max(contentWidth, contentHeight)) || 1),
+      scrollX: 0, scrollY: 0, scale: autoScale,
       useCORS: true
     });
     const a = document.createElement('a');
@@ -977,7 +1086,7 @@ function exportData() {
     currentYear, currentQuarter, colorPalette: currentColorPalette, projectOrder,
     projects: projects.map(p => ({
       id: p.id, name: p.name, startDate: p.startDate.toISOString().split('T')[0],
-      endDate: p.endDate.toISOString().split('T')[0], description: p.description, color: p.color, order: p.order, marker: p.marker || null
+      endDate: p.endDate.toISOString().split('T')[0], description: p.description, color: p.color, order: p.order, marker: p.marker || null, rowIndex: Number.isInteger(p.rowIndex) ? p.rowIndex : 0
     }))
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1011,7 +1120,8 @@ function importProjects() {
         description: p.description || '',
         color: p.color || getProjectColor(projects.length),
         order: p.order || projects.length,
-        marker: p.marker || null
+        marker: p.marker || null,
+        rowIndex: Number.isInteger(p.rowIndex) ? p.rowIndex : 0
       });
       projectOrder.push(projects[projects.length - 1].id);
     });
@@ -1041,7 +1151,7 @@ function saveProjectsToStorage() {
       id: p.id, name: p.name,
       startDate: p.startDate.toISOString().split('T')[0],
       endDate: p.endDate.toISOString().split('T')[0],
-      description: p.description, color: p.color, order: p.order, marker: p.marker || null
+      description: p.description, color: p.color, order: p.order, marker: p.marker || null, rowIndex: Number.isInteger(p.rowIndex) ? p.rowIndex : 0
     })), currentYear, currentQuarter, projectOrder
   };
   localStorage.setItem('workplanProjects', JSON.stringify(data));
@@ -1054,7 +1164,7 @@ function loadProjectsFromStorage() {
     const data = JSON.parse(stored);
     projects = data.projects.map(p => ({
       id: p.id, name: p.name, startDate: new Date(p.startDate), endDate: new Date(p.endDate),
-      description: p.description, color: p.color || getProjectColor(0), order: p.order || 0, marker: p.marker || null
+      description: p.description, color: p.color || getProjectColor(0), order: p.order || 0, marker: p.marker || null, rowIndex: Number.isInteger(p.rowIndex) ? p.rowIndex : 0
     }));
     projectOrder = Array.isArray(data.projectOrder) ? data.projectOrder : projects.map(p => p.id);
     if (data.currentYear) currentYear = data.currentYear;
@@ -1259,3 +1369,68 @@ function resetZoom() {
 
 function showHelpModal() { const m = document.getElementById('helpModal'); if (m) m.style.display = 'block'; }
 function closeHelpModal() { const m = document.getElementById('helpModal'); if (m) m.style.display = 'none'; }
+
+/* ====== Helpers: contrast color and local parser ====== */
+function getContrastColor(hex) {
+  // Expect formats like #rrggbb
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return '#ffffff';
+  const num = parseInt(m[1], 16);
+  const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+  // Luminance formula
+  const lum = 0.2126*(r/255) + 0.7152*(g/255) + 0.0722*(b/255);
+  return lum > 0.6 ? '#000000' : '#ffffff';
+}
+
+function parseDateFlexible(s) {
+  if (!s) return null;
+  // Accept ISO yyyy-mm-dd, dd-mm-yyyy, dd/mm/yyyy
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const dmyDash = /^(\d{2})-(\d{2})-(\d{4})$/;
+  const dmySlash = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  if (iso.test(s)) return new Date(s);
+  let m = dmyDash.exec(s) || dmySlash.exec(s);
+  if (m) {
+    const [_, dd, mm, yyyy] = m;
+    return new Date(`${yyyy}-${mm}-${dd}`);
+  }
+  const dt = new Date(s);
+  return isNaN(dt) ? null : dt;
+}
+
+function parseProjectsLocal(input) {
+  const lines = input.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const items = [];
+  // Try table-like: header optional then repeating name, start, end lines
+  let i = 0;
+  // Skip header line(s) if looks like text without date
+  while (i < lines.length && !parseDateFlexible(lines[i])) {
+    // if next two lines are dates, treat current as name; else maybe header
+    const d1 = parseDateFlexible(lines[i+1]);
+    const d2 = parseDateFlexible(lines[i+2]);
+    if (d1 && d2) break;
+    i++;
+  }
+  for (; i < lines.length; ) {
+    const name = lines[i];
+    const s = parseDateFlexible(lines[i+1]);
+    const e = parseDateFlexible(lines[i+2]);
+    if (name && s && e) {
+      items.push({ name, startDate: s.toISOString().split('T')[0], endDate: e.toISOString().split('T')[0] });
+      i += 3; continue;
+    }
+    // Try single-line CSV: Name, dd-mm-yyyy, dd-mm-yyyy
+    const csv = lines[i].split(',').map(x => x.trim());
+    if (csv.length >= 3) {
+      const s2 = parseDateFlexible(csv[csv.length-2]);
+      const e2 = parseDateFlexible(csv[csv.length-1]);
+      const name2 = csv.slice(0, csv.length-2).join(', ');
+      if (s2 && e2 && name2) {
+        items.push({ name: name2, startDate: s2.toISOString().split('T')[0], endDate: e2.toISOString().split('T')[0] });
+        i += 1; continue;
+      }
+    }
+    i++;
+  }
+  return items;
+}
