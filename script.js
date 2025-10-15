@@ -773,20 +773,39 @@ function editProjectDates(idv) {
   el.classList.add('editing');
   setTimeout(() => id(`startDate-${idv}`)?.focus(), 50);
 }
+
+// BUG FIX: Prevent race condition with global click handler.
 function saveDateEdit(idv) {
+  // Immediately clear the editing state to prevent the global click
+  // handler from firing 'cancelDateEdit' incorrectly.
+  editingProjectId = null;
+
   const s = id(`startDate-${idv}`)?.value;
   const e = id(`endDate-${idv}`)?.value;
-  if (!s || !e) return showError('Enter both start and end.');
+  
+  if (!s || !e) {
+    renderProjects(); // Re-render to remove the editing UI
+    return showError('Enter both start and end.');
+  }
+
   const sD = new Date(s), eD = new Date(e);
   
-  // BUG FIX 3: Allow saving single-day events.
-  // Changed check from >= to > to permit the same start and end date.
-  if (sD > eD) return showError('End must be on or after start.');
-
+  if (sD > eD) {
+    renderProjects(); // Re-render to remove the editing UI
+    return showError('End must be on or after start.');
+  }
+  
   const p = projects.find(x => x.id === idv);
-  if (p) { p.startDate = sD; p.endDate = eD; saveProjectsToStorage(); renderProjects(); renderTimeline(); showSuccess('Dates updated.'); }
-  editingProjectId = null;
+  if (p) { 
+    p.startDate = sD; 
+    p.endDate = eD; 
+    saveProjectsToStorage(); 
+    renderProjects(); 
+    renderTimeline(); 
+    showSuccess('Dates updated.'); 
+  }
 }
+
 function cancelDateEdit() { editingProjectId = null; renderProjects(); }
 
 /* =============== Drag & drop in All Projects =============== */
