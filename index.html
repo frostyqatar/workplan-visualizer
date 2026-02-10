@@ -12,12 +12,13 @@
     <h1>Workplan Visualizer</h1>
     <div class="header-actions">
       <div class="density-toggle">
-        <button class="view-btn small" id="densityCompactBtn" onclick="setDensity('compact')" title="Compact density">Compact</button>
-        <button class="view-btn small active" id="densityComfortBtn" onclick="setDensity('comfortable')" title="Comfortable density">Comfort</button>
+        <button class="view-btn small" id="densityCompactBtn" title="Compact density">Compact</button>
+        <button class="view-btn small active" id="densityComfortBtn" title="Comfortable density">Comfort</button>
       </div>
-      <button id="themeToggleBtn" class="btn-secondary" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-      <button class="btn-secondary" onclick="showHelpModal()" title="Help and shortcuts">❔ Help</button>
-      <button class="btn-secondary" onclick="changeSaveLocation()" title="Pick or change NDJSON save location">💾 Save Location</button>
+      <button id="themeToggleBtn" class="btn-secondary" title="Toggle dark mode" aria-label="Toggle dark mode">🌙 Dark</button>
+      <button class="btn-secondary" title="User guide" aria-label="Open user guide">📖 Guide</button>
+      <button class="btn-secondary" title="Help and shortcuts">❔ Help</button>
+      <button class="btn-secondary" title="Pick or change NDJSON save location">💾 Save Location</button>
       <span id="autosaveStatus" class="autosave-status" title="File System Access autosave status">Autosave: Off</span>
     </div>
   </div>
@@ -25,7 +26,7 @@
   <div class="input-section">
     <div class="color-palette-section">
       <label class="palette-label">Color Palette:</label>
-      <select id="colorPalette" class="color-selector" onchange="updateColorPalette()">
+      <select id="colorPalette" class="color-selector">
         <option value="mckinsey">McKinsey & Company</option>
         <option value="bcg">Boston Consulting Group</option>
         <option value="bain">Bain & Company</option>
@@ -41,61 +42,57 @@
 
     <div class="input-group">
       <input type="text" id="projectInput" class="input-field"
-             placeholder="Type a project (e.g., 'Robin Jan–Sept; CC tasks Q4 2025; Zaynab Q3 2026')"
-             onkeypress="handleEnterKey(event)">
-      <button onclick="processProject()" class="btn-primary send-btn">Send</button>
-      <button onclick="showApiKeyModal()" class="btn-secondary">Change API Key</button>
+             placeholder="Type a project (e.g., 'Robin Jan–Sept; CC tasks Q4 2025; Zaynab Q3 2026')">
+      <button class="btn-primary send-btn">Send</button>
+      <button class="btn-secondary">Change API Key</button>
     </div>
 
-      <div class="search-group">
-        <input type="text" id="filterInput" class="search-input" placeholder="Filter projects by name or description..."/>
-      </div>
+    <div class="search-group">
+      <input type="text" id="filterInput" class="search-input" placeholder="Filter projects by name or description..."/>
+    </div>
 
     <div class="error-message" id="errorMessage"></div>
-      <div class="success-message" id="successMessage"></div>
-      <div class="loading" id="loading"><span class="spinner" aria-hidden="true"></span> Processing with AI...</div>
+    <div class="success-message" id="successMessage"></div>
+    <div class="loading" id="loading"><span class="spinner" aria-hidden="true"></span> Processing with AI...</div>
   </div>
 
   <div class="timeline-container">
     <div class="timeline-header">
       <h2>Timeline View</h2>
       <div class="year-navigation">
-        <button class="nav-arrow" onclick="navigatePeriod(-1)">←</button>
+        <button class="nav-arrow" title="Previous period">←</button>
         <div class="current-year" id="currentPeriod">2025</div>
-        <button class="nav-arrow" onclick="navigatePeriod(1)">→</button>
+        <button class="nav-arrow" title="Next period">→</button>
       </div>
     </div>
 
     <div class="timeline-view">
       <div class="view-selector">
-        <button class="view-btn active" onclick="setView('year')" id="yearBtn">14-Month View</button>
-        <button class="view-btn" onclick="setView('quarter')" id="quarterBtn">Quarterly View</button>
+        <button class="view-btn active" id="yearBtn">14-Month View</button>
+        <button class="view-btn" id="quarterBtn">Quarterly View</button>
       </div>
 
       <div class="controls-section">
-        <button class="btn-secondary" onclick="adjustNodeHeight(-4)">− Node</button>
-        <button class="btn-secondary" onclick="adjustNodeHeight(4)">+ Node</button>
-        <button class="btn-secondary" onclick="adjustTextSize(-0.1)">− Text</button>
-        <button class="btn-secondary" onclick="adjustTextSize(0.1)">+ Text</button>
-        <button class="btn-secondary" onclick="squeezeSpacing()">Squeeze</button>
-        <button class="btn-secondary" onclick="breezeSpacing()">Breeze</button>
-        <button class="btn-secondary" id="toggleWrapBtn" onclick="toggleWrap()">Wrap: Off</button>
-        <button class="btn-secondary" id="toggleAutosortBtn" onclick="toggleAutosort()" title="Toggle automatic stacking of overlapping nodes">Autosort: On</button>
-        <button class="btn-secondary" id="toggleTodayBtn" onclick="toggleTodayLine()">Today: Off</button>
-        <button onclick="downloadPNG()" class="btn-secondary">📥 Download PNG</button>
-        <button onclick="exportData()" class="btn-secondary">📤 Export Data</button>
-        <button onclick="showImportModal()" class="btn-secondary">📥 Import Data</button>
-        <button onclick="resetZoom()" class="btn-secondary" title="Reset zoom to full 14-month view">Reset Zoom</button>
-        <button onclick="clearAllProjects()" class="btn-secondary" style="background:#c62828;">🗑️ Clear All</button>
+        <button class="btn-secondary">− Node</button>
+        <button class="btn-secondary">+ Node</button>
+        <button class="btn-secondary">− Text</button>
+        <button class="btn-secondary">+ Text</button>
+        <button class="btn-secondary">Squeeze</button>
+        <button class="btn-secondary">Breeze</button>
+        <button class="btn-secondary" id="toggleWrapBtn">Wrap: Off</button>
+        <button class="btn-secondary" id="toggleAutosortBtn" title="Toggle automatic stacking of overlapping nodes">Autosort: On</button>
+        <button class="btn-secondary" id="toggleTodayBtn">Today: Off</button>
+        <button class="btn-secondary">📥 Download PNG</button>
+        <button class="btn-secondary">📤 Export Data</button>
+        <button class="btn-secondary">📥 Import Data</button>
+        <button class="btn-secondary" title="Reset zoom to full 14-month view">Reset Zoom</button>
+        <button class="btn-secondary" style="background:#c62828;">🗑️ Clear All</button>
       </div>
 
       <div class="timeline-grid" id="timelineGrid">
         <div class="timeline-months" id="timelineMonths"></div>
         <div class="timeline-content" id="timelineContent">
-          <div class="quarter-indicator q1"></div>
-          <div class="quarter-indicator q2"></div>
-          <div class="quarter-indicator q3"></div>
-          <div class="quarter-indicator q4"></div>
+          <!-- Quarter indicators are now rendered dynamically -->
           <div id="todayLine" class="today-line"></div>
         </div>
       </div>
@@ -115,7 +112,7 @@
       </div>
       <div class="input-group">
         <input type="password" id="apiKeyInput" class="input-field" placeholder="Enter your Gemini API key">
-        <button onclick="saveApiKey()" class="btn-primary">Save</button>
+        <button class="btn-primary">Save</button>
       </div>
     </div>
   </div>
@@ -129,8 +126,8 @@
       </div>
       <textarea id="importData" placeholder="Paste JSON data here..."></textarea>
       <div class="modal-buttons">
-        <button onclick="closeImportModal()" class="btn-secondary">Cancel</button>
-        <button onclick="importProjects()" class="btn-primary">Import</button>
+        <button class="btn-secondary">Cancel</button>
+        <button class="btn-primary">Import</button>
       </div>
     </div>
   </div>
@@ -167,8 +164,8 @@
       <div id="existingCustomPalettes"></div>
 
       <div class="modal-buttons">
-        <button onclick="closeCustomColorModal()" class="btn-secondary">Cancel</button>
-        <button onclick="saveCustomPalette()" class="btn-primary">Save Palette</button>
+        <button class="btn-secondary">Cancel</button>
+        <button class="btn-primary">Save Palette</button>
       </div>
     </div>
   </div>
@@ -183,16 +180,124 @@
       <div>
         <ul class="help-list">
           <li><strong>Drag</strong> project bars to move dates</li>
-          <li><strong>Double-click</strong> a bar for a quick milestone menu</li>
+          <li><strong>Double-click</strong> a bar to rename inline</li>
           <li><strong>Right-click</strong> a bar for actions and color</li>
           <li><strong>Enter</strong> to submit text input</li>
-          <li><strong>W</strong>: Toggle wrap • <strong>T</strong>: Toggle Today line</li>
-          <li><strong>←/→</strong>: Navigate period • <strong>Y</strong>/<strong>Q</strong>: Year/Quarter view</li>
+          <li><strong>W</strong>: Toggle wrap &bull; <strong>T</strong>: Toggle Today line</li>
+          <li><strong>←/→</strong>: Navigate period &bull; <strong>Y</strong>/<strong>Q</strong>: Year/Quarter view</li>
           <li><strong>+</strong>/<strong>-</strong>: Zoom in/out (Year view)</li>
+          <li><strong>?</strong>: Open this dialog</li>
         </ul>
       </div>
       <div class="modal-buttons">
-        <button onclick="closeHelpModal()" class="btn-primary">Close</button>
+        <button class="btn-primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Guide Modal (Phase 5) -->
+  <div class="guide-modal" id="guideModal">
+    <div class="modal-content guide-content">
+      <div class="modal-header">
+        <h3>📖 User Guide</h3>
+        <p>Everything you need to know about Workplan Visualizer.</p>
+      </div>
+      <div class="guide-body">
+
+        <section class="guide-section">
+          <h4>1. Getting Started</h4>
+          <p>Add projects using the input field at the top. You can type natural language descriptions and the app will parse them locally — no AI needed for most formats. If local parsing fails and you have a Gemini API key configured, it will fall back to AI.</p>
+          <p>You can also add projects manually using the quick-add form below the project list, or import them from a JSON file.</p>
+        </section>
+
+        <section class="guide-section">
+          <h4>2. Input Format Examples</h4>
+          <p>The following formats are parsed locally (no AI required):</p>
+          <table class="guide-table">
+            <thead>
+              <tr><th>Format</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Quarter range</td><td><code>Task 1 Q1-Q3</code></td></tr>
+              <tr><td>Quarter + year</td><td><code>Task Q1-Q3 2025</code></td></tr>
+              <tr><td>Single quarter</td><td><code>Review Q4 2025</code></td></tr>
+              <tr><td>Month range</td><td><code>Robin Jan-Sept</code></td></tr>
+              <tr><td>Month + year</td><td><code>Robin Jan-Sept 2025</code></td></tr>
+              <tr><td>Compact dates</td><td><code>Task 12/12-24/12</code></td></tr>
+              <tr><td>Full dates</td><td><code>Task 12/12/2024-24/12/2024</code></td></tr>
+              <tr><td>CSV</td><td><code>Task, 2025-01-15, 2025-03-31</code></td></tr>
+              <tr><td>Multiple (semicolons)</td><td><code>Task 1 Q1-Q3; Task 2 Jan-Mar</code></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="guide-section">
+          <h4>3. Timeline Navigation</h4>
+          <ul>
+            <li><strong>14-Month View</strong>: Shows Nov of previous year through Dec of current year</li>
+            <li><strong>Quarterly View</strong>: Focuses on a single quarter</li>
+            <li>Use <strong>← →</strong> arrows (or keyboard) to navigate periods</li>
+            <li>Use <strong>🔍+ / 🔍−</strong> buttons (or + / − keys) to zoom in/out</li>
+            <li><strong>Reset Zoom</strong> returns to the full 14-month view</li>
+          </ul>
+        </section>
+
+        <section class="guide-section">
+          <h4>4. Project Management</h4>
+          <ul>
+            <li><strong>Drag</strong> project bars on the timeline to change dates</li>
+            <li><strong>Double-click</strong> a bar to rename it inline</li>
+            <li><strong>Right-click</strong> a bar for actions: edit, color, milestones, duplicate, delete</li>
+            <li><strong>Click</strong> project names or dates in the list to edit them</li>
+            <li><strong>Drag</strong> projects in the list (via the ⋮⋮ handle) to reorder them</li>
+            <li><strong>Filter</strong> projects using the search box</li>
+          </ul>
+        </section>
+
+        <section class="guide-section">
+          <h4>5. Customization</h4>
+          <ul>
+            <li><strong>Color Palettes</strong>: Choose from 8 built-in palettes or create custom ones</li>
+            <li><strong>+ Node / − Node</strong>: Adjust bar height</li>
+            <li><strong>+ Text / − Text</strong>: Adjust text size on bars</li>
+            <li><strong>Squeeze / Breeze</strong>: Adjust spacing between rows</li>
+            <li><strong>Wrap</strong>: Toggle text wrapping on bars</li>
+            <li><strong>Autosort</strong>: Automatically stack overlapping bars</li>
+            <li><strong>Today</strong>: Show/hide the current date indicator</li>
+            <li><strong>Compact / Comfort</strong>: Toggle density mode</li>
+            <li><strong>Dark / Light</strong>: Toggle theme</li>
+          </ul>
+        </section>
+
+        <section class="guide-section">
+          <h4>6. Keyboard Shortcuts</h4>
+          <table class="guide-table">
+            <tbody>
+              <tr><td><kbd>W</kbd></td><td>Toggle wrap</td></tr>
+              <tr><td><kbd>T</kbd></td><td>Toggle Today line</td></tr>
+              <tr><td><kbd>Y</kbd></td><td>Year view</td></tr>
+              <tr><td><kbd>Q</kbd></td><td>Quarter view</td></tr>
+              <tr><td><kbd>← →</kbd></td><td>Navigate period</td></tr>
+              <tr><td><kbd>+ −</kbd></td><td>Zoom in / out</td></tr>
+              <tr><td><kbd>?</kbd></td><td>Open help</td></tr>
+              <tr><td><kbd>Enter</kbd></td><td>Submit input</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="guide-section">
+          <h4>7. Data Management</h4>
+          <ul>
+            <li><strong>📤 Export Data</strong>: Download all projects as JSON</li>
+            <li><strong>📥 Import Data</strong>: Load projects from a JSON file or pasted text</li>
+            <li><strong>📥 Download PNG</strong>: Save the timeline as an image</li>
+            <li>Projects are automatically saved to your browser's localStorage</li>
+          </ul>
+        </section>
+
+      </div>
+      <div class="modal-buttons">
+        <button class="btn-primary" data-action="close-guide">Close</button>
       </div>
     </div>
   </div>
@@ -200,8 +305,8 @@
   <!-- Context menu -->
   <div id="nodeContextMenu" class="context-menu hidden"></div>
 
-  <input type="file" id="fileInput" class="file-input" accept=".json" onchange="handleFileImport(event)">
+  <input type="file" id="fileInput" class="file-input" accept=".json">
 
-  <script src="script.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
