@@ -24,6 +24,12 @@ let theme = localStorage.getItem('wpTheme') || 'light';
 let filterQuery = '';
 let autoSort = true;       // New: autosort overlapping nodes into rows
 
+// ===== File System Access (FSA) + IndexedDB for append-only NDJSON autosave =====
+let ndjsonFileHandle = null;   // Persisted file handle
+let autosaveEnabled = false;   // Whether we have permission and a handle
+let autosaveQueue = [];        // Queue of NDJSON lines waiting to be flushed
+let autosaveTimer = null;      // Debounce timer
+
 /* =============== Palettes =============== */
 const colorPalettes = {
   mckinsey: ['#003f5c', '#2f4b7c', '#665191', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'],
