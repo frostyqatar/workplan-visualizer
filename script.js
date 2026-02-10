@@ -434,12 +434,26 @@ function calculateProjectPositions(visibleProjects, startDate, totalDuration) {
 
   sorted.forEach(project => {
     const projectStart = project.startDate < startDate ? startDate : project.startDate;
-    const projectEnd = project.endDate > new Date(startDate.getTime() + totalDuration) ? new Date(startDate.getTime() + totalDuration) : project.endDate;
+    
+    // BUG FIX 1: Handle single-day projects.
+    // Create a temporary end date for calculation to avoid modifying original data.
+    let tempEndDate = new Date(project.endDate);
+    // If start and end dates are the same, the duration is 0. Add 1 day for visualization.
+    if (tempEndDate.getTime() <= project.startDate.getTime()) {
+      tempEndDate.setDate(tempEndDate.getDate() + 1);
+    }
+
+    const projectEnd = tempEndDate > new Date(startDate.getTime() + totalDuration) ? new Date(startDate.getTime() + totalDuration) : tempEndDate;
+    // This check is now safe for single-day events.
     if (projectEnd <= projectStart) return;
 
     const startPercent = ((projectStart - startDate) / totalDuration) * 100;
     const endPercent = ((projectEnd - startDate) / totalDuration) * 100;
-    const width = Math.max(endPercent - startPercent, 3);
+
+    // BUG FIX 2: Correct the minimum width.
+    // A minimum width of 3% is too large. 0.2% is more reasonable for ensuring visibility
+    // without misrepresenting the duration of short tasks.
+    const width = Math.max(endPercent - startPercent, 0.2);
 
     // Determine row
     let row = 0;
@@ -765,16 +779,39 @@ function editProjectDates(idv) {
   el.classList.add('editing');
   setTimeout(() => id(`startDate-${idv}`)?.focus(), 50);
 }
+
+// BUG FIX: Prevent race condition with global click handler.
 function saveDateEdit(idv) {
+  // Immediately clear the editing state to prevent the global click
+  // handler from firing 'cancelDateEdit' incorrectly.
+  editingProjectId = null;
+
   const s = id(`startDate-${idv}`)?.value;
   const e = id(`endDate-${idv}`)?.value;
-  if (!s || !e) return showError('Enter both start and end.');
+  
+  if (!s || !e) {
+    renderProjects(); // Re-render to remove the editing UI
+    return showError('Enter both start and end.');
+  }
+
   const sD = new Date(s), eD = new Date(e);
-  if (sD >= eD) return showError('End must be after start.');
+  
+  if (sD > eD) {
+    renderProjects(); // Re-render to remove the editing UI
+    return showError('End must be on or after start.');
+  }
+  
   const p = projects.find(x => x.id === idv);
-  if (p) { p.startDate = sD; p.endDate = eD; saveProjectsToStorage(); renderProjects(); renderTimeline(); showSuccess('Dates updated.'); }
-  editingProjectId = null;
+  if (p) { 
+    p.startDate = sD; 
+    p.endDate = eD; 
+    saveProjectsToStorage(); 
+    renderProjects(); 
+    renderTimeline(); 
+    showSuccess('Dates updated.'); 
+  }
 }
+
 function cancelDateEdit() { editingProjectId = null; renderProjects(); }
 
 /* =============== Drag & drop in All Projects =============== */
