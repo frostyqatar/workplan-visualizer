@@ -255,7 +255,7 @@ export function editProjectTitle(projectId) {
 
 function renderTitleEditUI(el, p) {
   el.innerHTML = `
-    <div class="editing" onclick="event.stopPropagation()">
+    <div class="editing">
       <input type="text" class="title-input" id="titleInput-${p.id}" value="${escapeHtml(p.name)}">
       <div class="title-edit-buttons">
         <button class="title-edit-btn" data-action="save-title" data-id="${p.id}">Save</button>
@@ -264,7 +264,19 @@ function renderTitleEditUI(el, p) {
     </div>`;
   el.classList.add('editing');
   setTimeout(() => {
+    const editingDiv = el.querySelector('.editing');
     const input = id(`titleInput-${p.id}`);
+
+    // Stop propagation on the editing div itself, but not on buttons
+    if (editingDiv) {
+      editingDiv.addEventListener('click', (e) => {
+        // Let button clicks through, stop everything else
+        if (e.target.tagName !== 'BUTTON') {
+          e.stopPropagation();
+        }
+      });
+    }
+
     if (input) {
       input.focus(); input.select();
       input.addEventListener('keydown', (e) => {
@@ -316,7 +328,7 @@ function renderDateEditUI(el, p) {
   const s = formatDateISO(p.startDate); // Bug Fix 1.2: local dates
   const e = formatDateISO(p.endDate);
   el.innerHTML = `
-    <div class="editing" onclick="event.stopPropagation()">
+    <div class="editing">
       <input type="date" class="date-input" id="startDate-${p.id}" value="${s}">
       <span> to </span>
       <input type="date" class="date-input" id="endDate-${p.id}" value="${e}">
@@ -327,8 +339,20 @@ function renderDateEditUI(el, p) {
     </div>`;
   el.classList.add('editing');
   setTimeout(() => {
+    const editingDiv = el.querySelector('.editing');
     const startInput = id(`startDate-${p.id}`);
     const endInput = id(`endDate-${p.id}`);
+
+    // Stop propagation on the editing div itself, but not on buttons
+    if (editingDiv) {
+      editingDiv.addEventListener('click', (e) => {
+        // Let button clicks through, stop everything else
+        if (e.target.tagName !== 'BUTTON') {
+          e.stopPropagation();
+        }
+      });
+    }
+
     if (startInput) {
       startInput.focus();
       startInput.addEventListener('click', (e) => e.stopPropagation());
